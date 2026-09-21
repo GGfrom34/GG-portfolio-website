@@ -58,6 +58,12 @@ REGIONS = {
 # Every modelling assumption lives here and is echoed back in the result.
 ASSUMPTIONS: dict[str, Any] = {
     "usage_is_total_annual_kwh_including_ev": True,
+    # Used only when the caller opts in to assumptions (allow_assumptions=True).
+    "default_region": "C",
+    "default_base_usage_kwh": 2500.0,  # a typical household before any EV; a round figure, not a quoted Ofgem value
+    "default_ev_charging_pattern": "mixed",
+    "ev_mixed_offpeak_share": 0.7,
+    "ev_mixed_peak_window": "17:00-22:00",
     "ev_default_kwh_per_week": 40.0,
     "ev_charger_kw": 7.0,
     "ev_overnight_window": "23:00-07:00",
@@ -109,8 +115,8 @@ ARCHETYPES: dict[str, dict[str, Any]] = {
         "explanation": "An EV is a large, schedulable load; charging overnight lets it use a cheap night rate.",
     },
     "ev_daytime_flexible": {
-        "title": "EV charged in the daytime or flexibly",
-        "explanation": "A fixed overnight window only helps if charging can move there. Daytime charging suits a flat rate, and flexible charging can follow half-hourly prices on Agile or Cosy.",
+        "title": "EV charging not fully confined to the cheap overnight window (daytime, flexible, or a mix of off-peak and peak)",
+        "explanation": "A cheap overnight window only helps for the charging that can move there. Daytime charging suits a flat rate, a mix of off-peak and peak charging still pays the peak rate on its peak share, and flexible charging can follow half-hourly prices on Agile or Cosy.",
     },
     "solar_ev": {
         "title": "Solar panels plus an EV",
@@ -153,13 +159,15 @@ class Profile:
     average_usage_kwh: float
     has_solar: bool
     has_ev: bool
-    export_capacity_kw: Optional[float] = None
+    export_capacity_kw: Optional[float] = None  # the solar array size in kWp (also accepted as `solar_kwp`)
     ev_charging_pattern: Optional[str] = None
     ev_kwh_per_week: Optional[float] = None
+    ev_annual_kwh: Optional[float] = None
     has_battery: bool = False
     battery_kwh: Optional[float] = None
     battery_can_shift_to_offpeak: bool = False
     warnings: list[str] = field(default_factory=list)
+    assumed: list[dict[str, str]] = field(default_factory=list)  # inputs that were defaulted: {input, question, assumed}
 
 
 @dataclass
@@ -438,6 +446,13 @@ def _place_ev(pattern: str, daily_kwh: float, rates: list[float]) -> list[float]
     """Spread the EV's daily energy over slots according to how it is charged."""
     load = [0.0] * SLOTS
     per_slot = ASSUMPTIONS["ev_charger_kw"] * 0.5
+    if pattern == "mixed":  # part charged in the cheapest overnight slots, the rest on arrival home in the evening
+        share = ASSUMPTIONS["ev_mixed_offpeak_share"]
+        peak_slots = _window_slots(ASSUMPTIONS["ev_mixed_peak_window"])
+        load = _place_ev("overnight", daily_kwh * share, rates)
+        for s in peak_slots:
+            load[s] += daily_kwh * (1 - share) / len(peak_slots)
+        return load
     if pattern == "daytime":
         slots = _window_slots(ASSUMPTIONS["ev_daytime_window"])
         for s in slots:
@@ -506,13 +521,19 @@ def _dispatch_day(demand: list[float], solar: list[float], import_rates: list[fl
     return grid, export, self_used, via_battery, shifted
 
 
+def _ev_year_kwh(profile: Profile) -> float:
+    """Annual EV charging energy: the given annual figure, else weekly x 52, else the default."""
+    if profile.ev_annual_kwh is not None:
+        return profile.ev_annual_kwh
+    return (profile.ev_kwh_per_week or ASSUMPTIONS["ev_default_kwh_per_week"]) * 52
+
+
 def _cost_for_tariff(profile: Profile, tariff: Tariff) -> Breakdown:
     days = ASSUMPTIONS["days_per_year"]
     usage = profile.average_usage_kwh
     ev_year = 0.0
     if profile.has_ev:
-        ev_year = (profile.ev_kwh_per_week or ASSUMPTIONS["ev_default_kwh_per_week"]) * 52
-        ev_year = min(ev_year, usage * ASSUMPTIONS["ev_max_share_of_usage"])
+        ev_year = min(_ev_year_kwh(profile), usage * ASSUMPTIONS["ev_max_share_of_usage"])
     base_daily = (usage - ev_year) / days
     rates = tariff.slot_rates_p_kwh
     demand = [base_daily * s for s in _demand_shape()]
@@ -623,6 +644,8 @@ def _import_reasons(profile: Profile, tariff: Tariff, bd: Breakdown, baseline: O
         reasons.append(msg + ".")
         if pattern == "daytime" and rs["cheapest_window_local"]:
             caveats.append("Daytime EV charging does not use this tariff's cheap window, so most charging is billed at higher rates.")
+        if pattern == "mixed" and rs["cheapest_window_local"]:
+            caveats.append(f"Only about {ASSUMPTIONS['ev_mixed_offpeak_share']:.0%} of EV charging is assumed to use the cheap window; the rest is billed at higher rates.")
     if profile.has_solar:
         via = f" and {bd.battery_from_solar_kwh:,.0f} kWh via the battery" if profile.has_battery else ""
         reasons.append(f"Solar (about {bd.solar_generated_kwh:,.0f} kWh/yr) supplies {bd.solar_self_used_kwh:,.0f} kWh directly{via}; {bd.solar_exported_kwh:,.0f} kWh is exported.")
@@ -712,6 +735,8 @@ def build_recommendations(profile: Profile, market: Market) -> dict[str, Any]:
         "alternatives": [i for i in items if i is not top_import and i is not top_export],
         "notes": notes,
         "warnings": list(profile.warnings),
+        "based_on_assumptions": bool(profile.assumed),
+        "assumed_inputs": [dict(a) for a in profile.assumed],
         "assumptions": dict(ASSUMPTIONS),
         "data_source": {
             "api": API_BASE, "fetched_at": market.fetched_at,
@@ -749,67 +774,143 @@ def _as_number(data: dict[str, Any], key: str, required: bool = False, positive:
     return float(value)
 
 
-def validate_profile(data: dict[str, Any]) -> Profile:
-    """Turn a raw profile dict into a validated Profile. Raises ProfileError."""
+EV_PATTERNS = ("overnight", "mixed", "daytime", "flexible")
+
+# The order assumed inputs are reported in, and the question that asks the household for each.
+_ASSUMED_INPUT_ORDER = (
+    "region", "average_usage_kwh", "has_solar", "solar_kwp", "has_ev", "ev_annual_kwh",
+    "ev_charging_pattern", "has_battery", "battery_kwh", "battery_can_shift_to_offpeak",
+)
+
+
+def _valid_regions_text() -> str:
+    return ", ".join(f"{k} ({v})" for k, v in REGIONS.items())
+
+
+def _assume(profile: Profile, key: str, question: str, assumed: str) -> None:
+    profile.assumed.append({"input": key, "question": question, "assumed": assumed})
+
+
+def validate_profile(data: dict[str, Any], *, allow_assumptions: bool = False) -> Profile:
+    """Turn a raw profile dict into a validated Profile. Raises ProfileError.
+
+    Strict by default: region, average_usage_kwh, has_solar and has_ev are required. With
+    allow_assumptions=True anything missing is defaulted instead (London, a typical
+    household's usage, no solar/EV/battery, mixed EV charging) and recorded in
+    `profile.assumed` so the caller can ask the household to replace it.
+    """
     if not isinstance(data, dict):
         raise ProfileError("profile must be a dict")
+
     region_raw = data.get("region")
-    if region_raw is None or str(region_raw).strip() == "":
-        raise ProfileError(f"region is required. Valid GSP letters: {', '.join(f'{k} ({v})' for k, v in REGIONS.items())}")
-    region = str(region_raw).strip().upper().lstrip("_")
+    region_given = region_raw is not None and str(region_raw).strip() != ""
+    if not region_given and not allow_assumptions:
+        raise ProfileError(f"region is required. Valid GSP letters: {_valid_regions_text()}")
+    region = str(region_raw).strip().upper().lstrip("_") if region_given else ASSUMPTIONS["default_region"]
     if region not in REGIONS:
-        raise ProfileError(f"region {region_raw!r} is not valid. Valid GSP letters: {', '.join(f'{k} ({v})' for k, v in REGIONS.items())}")
+        raise ProfileError(f"region {region_raw!r} is not valid. Valid GSP letters: {_valid_regions_text()}")
+
+    kwp_a, kwp_b = _as_number(data, "solar_kwp"), _as_number(data, "export_capacity_kw")
+    if kwp_a is not None and kwp_b is not None and kwp_a != kwp_b:
+        raise ProfileError("solar_kwp and export_capacity_kw both mean the solar array size in kW, but they differ; give only one")
+    ev_weekly, ev_annual = _as_number(data, "ev_kwh_per_week"), _as_number(data, "ev_annual_kwh")
+    if ev_weekly is not None and ev_annual is not None:
+        raise ProfileError("give either ev_annual_kwh or ev_kwh_per_week, not both")
+    usage = _as_number(data, "average_usage_kwh", required=not allow_assumptions)
 
     profile = Profile(
         region=region,
-        average_usage_kwh=_as_number(data, "average_usage_kwh", required=True),  # type: ignore[arg-type]
-        has_solar=_as_bool(data, "has_solar", required=True),
-        has_ev=_as_bool(data, "has_ev", required=True),
-        export_capacity_kw=_as_number(data, "export_capacity_kw"),
+        average_usage_kwh=usage or 0.0,  # replaced below when it has to be assumed
+        has_solar=_as_bool(data, "has_solar", required=not allow_assumptions),
+        has_ev=_as_bool(data, "has_ev", required=not allow_assumptions),
+        export_capacity_kw=kwp_a if kwp_a is not None else kwp_b,
         has_battery=_as_bool(data, "has_battery"),
         battery_kwh=_as_number(data, "battery_kwh"),
         battery_can_shift_to_offpeak=_as_bool(data, "battery_can_shift_to_offpeak"),
-        ev_kwh_per_week=_as_number(data, "ev_kwh_per_week"),
+        ev_kwh_per_week=ev_weekly,
+        ev_annual_kwh=ev_annual,
     )
+
+    if not region_given:
+        _assume(profile, "region", "the postcode of the property", f"{REGIONS[region]} (region {region})")
+    if allow_assumptions:  # only here are yes/no features genuinely unknown; strict mode requires solar and EV
+        if data.get("has_solar") is None:
+            _assume(profile, "has_solar", "whether the property has solar panels", "no solar panels")
+        if data.get("has_ev") is None:
+            _assume(profile, "has_ev", "whether you charge an electric vehicle at home", "no electric vehicle")
+        if data.get("has_battery") is None:
+            _assume(profile, "has_battery", "whether the home has battery storage", "no home battery")
+
     if profile.has_ev:
         pattern = data.get("ev_charging_pattern")
-        if pattern not in ("overnight", "daytime", "flexible"):
-            raise ProfileError(f"ev_charging_pattern must be 'overnight', 'daytime' or 'flexible' when has_ev is true, got {pattern!r}")
+        if pattern is None and allow_assumptions:
+            pattern = ASSUMPTIONS["default_ev_charging_pattern"]
+            _assume(profile, "ev_charging_pattern", "the EV charging pattern: off-peak only, or a mix of off-peak and peak",
+                    f"mixed: {ASSUMPTIONS['ev_mixed_offpeak_share']:.0%} off-peak, {1 - ASSUMPTIONS['ev_mixed_offpeak_share']:.0%} peak")
+        if pattern not in EV_PATTERNS:
+            raise ProfileError(f"ev_charging_pattern must be one of {', '.join(repr(p) for p in EV_PATTERNS)} when has_ev is true, got {pattern!r}")
         profile.ev_charging_pattern = pattern
-        ev_year = (profile.ev_kwh_per_week or ASSUMPTIONS["ev_default_kwh_per_week"]) * 52
-        if ev_year > profile.average_usage_kwh * ASSUMPTIONS["ev_max_share_of_usage"]:
-            profile.warnings.append(f"EV charging ({ev_year:,.0f} kWh/yr) is more than {ASSUMPTIONS['ev_max_share_of_usage']:.0%} of average_usage_kwh, so it was capped. average_usage_kwh should be the household total including EV charging.")
-        if profile.ev_kwh_per_week is None:
+        if ev_weekly is None and ev_annual is None:
             profile.warnings.append(f"ev_kwh_per_week not given; assumed {ASSUMPTIONS['ev_default_kwh_per_week']:.0f} kWh/week.")
+            default_year = ASSUMPTIONS["ev_default_kwh_per_week"] * 52
+            _assume(profile, "ev_annual_kwh", "the annual EV charging consumption (kWh)",
+                    f"about {default_year:,.0f} kWh a year ({ASSUMPTIONS['ev_default_kwh_per_week']:.0f} kWh a week)")
+
+    if usage is None:  # only reachable with allow_assumptions: usage is a total including EV charging
+        base = ASSUMPTIONS["default_base_usage_kwh"]
+        ev_part = _ev_year_kwh(profile) if profile.has_ev else 0.0
+        profile.average_usage_kwh = base + ev_part
+        if profile.has_ev:
+            _assume(profile, "average_usage_kwh", "the total annual usage, including annual EV charging consumption",
+                    f"about {base:,.0f} kWh a year for a typical home plus {ev_part:,.0f} kWh a year of EV charging")
+        else:
+            _assume(profile, "average_usage_kwh", "the total annual electricity usage (kWh)", f"about {base:,.0f} kWh a year, typical for a home")
+    elif profile.has_ev:
+        ev_year = _ev_year_kwh(profile)
+        if ev_year > usage * ASSUMPTIONS["ev_max_share_of_usage"]:
+            profile.warnings.append(f"EV charging ({ev_year:,.0f} kWh/yr) is more than {ASSUMPTIONS['ev_max_share_of_usage']:.0%} of average_usage_kwh, so it was capped. average_usage_kwh should be the household total including EV charging.")
+
     if profile.has_solar and profile.export_capacity_kw is None:
         profile.warnings.append(f"export_capacity_kw not given; assumed a {ASSUMPTIONS['solar_default_kwp']} kWp array.")
+        _assume(profile, "solar_kwp", "the size of the solar array (kWp)", f"a {ASSUMPTIONS['solar_default_kwp']:g} kWp array")
     if profile.has_battery:
         if profile.battery_kwh is None:
             profile.warnings.append(f"battery_kwh not given; assumed {ASSUMPTIONS['battery_default_kwh']} kWh.")
-        if "battery_can_shift_to_offpeak" not in data:
+            _assume(profile, "battery_kwh", "the home battery size (kWh)", f"{ASSUMPTIONS['battery_default_kwh']:g} kWh")
+        if data.get("battery_can_shift_to_offpeak") is None:
             profile.warnings.append("battery_can_shift_to_offpeak not given; assumed false, so the battery only stores solar.")
+            _assume(profile, "battery_can_shift_to_offpeak", "whether the battery can charge from the grid at off-peak times and discharge at peak",
+                    "no, so it only stores solar")
     if profile.has_battery and not profile.has_solar and not profile.battery_can_shift_to_offpeak:
         profile.warnings.append("A battery that cannot charge from the grid at off-peak times and has no solar gives no tariff advantage, so it is ignored.")
+
+    profile.assumed.sort(key=lambda a: _ASSUMED_INPUT_ORDER.index(a["input"]))
     return profile
 
 
 def recommend_tariff(profile: dict[str, Any], *, market: Optional[Market] = None,
-                     fetcher: Callable[[str], Market] = fetch_market) -> dict[str, Any]:
+                     fetcher: Callable[[str], Market] = fetch_market,
+                     allow_assumptions: bool = False) -> dict[str, Any]:
     """Recommend Octopus tariffs for a household profile.
 
-    profile keys:
+    profile keys (required unless allow_assumptions=True):
         region (required)              GSP letter A-P, with or without a leading underscore
         average_usage_kwh (required)   annual household electricity use, including EV charging
         has_solar (required)           bool
         has_ev (required)              bool
-        export_capacity_kw             solar array size in kW, if known
-        ev_charging_pattern            'overnight' | 'daytime' | 'flexible' (required if has_ev)
-        ev_kwh_per_week                rough EV charging energy
+        solar_kwp                      solar array size in kWp, if known (alias: export_capacity_kw)
+        ev_charging_pattern            'overnight' | 'mixed' | 'daytime' | 'flexible' (required if has_ev)
+        ev_annual_kwh                  annual EV charging energy (or ev_kwh_per_week, not both)
         has_battery, battery_kwh, battery_can_shift_to_offpeak
+
+    With allow_assumptions=True nothing is required: missing inputs are defaulted and the
+    result lists each one in `assumed_inputs` (with the question that would replace it) so
+    the caller can offer a more accurate estimate. The default is strict, so the CLI and
+    library callers still fail fast on missing inputs such as region.
 
     Returns a JSON-serialisable dict (see build_recommendations). Pass `market`
     to skip the network (tests, caching); `fetcher` swaps the API layer.
     Raises ProfileError for bad input and OctopusApiError for network problems.
     """
-    validated = validate_profile(profile)
+    validated = validate_profile(profile, allow_assumptions=allow_assumptions)
     return build_recommendations(validated, market or fetcher(validated.region))

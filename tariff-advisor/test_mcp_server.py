@@ -83,12 +83,20 @@ class ToolListingTests(McpTestCase):
     async def test_exposes_exactly_the_three_tools(self):
         self.assertEqual(set(await self.tools()), {"recommend_tariff", "find_region", "list_regions"})
 
-    async def test_recommend_tariff_schema_requires_the_core_fields(self):
+    async def test_recommend_tariff_needs_no_inputs_so_it_can_answer_first(self):
         schema = (await self.tools())["recommend_tariff"].input_schema
-        self.assertEqual(set(schema["required"]), {"region", "average_usage_kwh", "has_solar", "has_ev"})
-        self.assertEqual(schema["properties"]["region"]["enum"], sorted(core.REGIONS))
-        pattern = schema["properties"]["ev_charging_pattern"]
-        self.assertIn(["overnight", "daytime", "flexible"], [o.get("enum") for o in pattern["anyOf"]])
+        self.assertFalse(schema.get("required"), "every input must be optional")
+        self.assertEqual(set(schema["properties"]), {
+            "region", "average_usage_kwh", "has_solar", "has_ev", "solar_kwp", "ev_annual_kwh",
+            "ev_charging_pattern", "has_battery", "battery_kwh", "battery_can_shift_to_offpeak",
+        })
+
+    async def test_recommend_tariff_schema_offers_the_region_and_pattern_enums(self):
+        properties = (await self.tools())["recommend_tariff"].input_schema["properties"]
+        region_enums = [o["enum"] for o in properties["region"]["anyOf"] if "enum" in o]
+        self.assertEqual(region_enums, [sorted(core.REGIONS)])
+        pattern_enums = [o["enum"] for o in properties["ev_charging_pattern"]["anyOf"] if "enum" in o]
+        self.assertEqual([set(e) for e in pattern_enums], [{"overnight", "mixed", "daytime", "flexible"}])
 
     async def test_every_tool_is_read_only_and_non_destructive(self):
         for name, tool in (await self.tools()).items():
@@ -108,6 +116,19 @@ class ToolListingTests(McpTestCase):
         self.assertIn("not financial advice", text)
         self.assertIn("regulated switching advice", text)
 
+    def test_server_instructions_tell_the_agent_to_answer_first_then_offer_to_refine(self):
+        text = mcp_server.mcp.instructions
+        for required in ("Answer first", "even when inputs are missing", "never invent values", "do not ask questions before answering",
+                         "assumed_inputs", "EVERY entry", "each once and in the order given", "find_region first"):
+            with self.subTest(required):
+                self.assertIn(required, text)
+
+    async def test_tool_description_repeats_the_rule_for_clients_that_ignore_server_instructions(self):
+        description = (await self.tools())["recommend_tariff"].description
+        for required in ("every input is optional", "assumed_inputs", "Never invent values"):
+            with self.subTest(required):
+                self.assertIn(required, description)
+
     def test_region_letter_enum_matches_the_core(self):
         self.assertEqual(set(typing.get_args(mcp_server.RegionLetter)), set(core.REGIONS))
 
@@ -121,7 +142,7 @@ class ToolListingTests(McpTestCase):
 class RecommendTariffTests(McpTestCase):
     def expected(self, profile):
         with mock.patch.object(core, "_get_json", Playback.load()):
-            return core.recommend_tariff(profile, fetcher=fixed_time_fetch)
+            return core.recommend_tariff(profile, fetcher=fixed_time_fetch, allow_assumptions=True)
 
     async def test_result_equals_calling_the_core_directly(self):
         result = await self.call("recommend_tariff", PROFILE)
@@ -136,8 +157,9 @@ class RecommendTariffTests(McpTestCase):
         self.assertTrue(data["assumptions"])
 
     async def test_solar_household_gets_import_and_export(self):
-        data = (await self.call("recommend_tariff", {"region": "N", "average_usage_kwh": 3500, "has_solar": True, "has_ev": False, "export_capacity_kw": 3.5})).structured_content
+        data = (await self.call("recommend_tariff", {"region": "N", "average_usage_kwh": 3500, "has_solar": True, "has_ev": False, "solar_kwp": 3.5})).structured_content
         self.assertEqual([r["role"] for r in data["recommendations"]], ["import", "export"])
+        self.assertNotIn("solar_kwp", [a["input"] for a in data["assumed_inputs"]])
 
     async def test_omitted_optional_fields_stay_omitted_so_the_core_can_warn(self):
         base = {"region": "C", "average_usage_kwh": 4000, "has_solar": False, "has_ev": False, "has_battery": True}
@@ -146,19 +168,20 @@ class RecommendTariffTests(McpTestCase):
         explicit = (await self.call("recommend_tariff", {**base, "battery_can_shift_to_offpeak": False})).structured_content
         self.assertFalse(any("battery_can_shift_to_offpeak not given" in w for w in explicit["warnings"]))
 
-    async def test_core_validation_error_keeps_its_message_and_makes_no_request(self):
-        result = await self.call("recommend_tariff", {**PROFILE, "ev_charging_pattern": None})
-        self.assertTrue(result.is_error)
-        self.assertIn("ev_charging_pattern", text_of(result))
-        self.assertEqual(self.stub.calls, [], "invalid input must fail before any API request")
+    def test_core_validation_errors_keep_their_message(self):
+        """A ProfileError must become a ToolError with its message, or the client only sees a generic failure."""
+        with self.assertRaises(mcp_server.ToolError) as ctx:
+            mcp_server._run(lambda: core.recommend_tariff({"region": "Z", "average_usage_kwh": 3000, "has_solar": False, "has_ev": False}, market=None))
+        self.assertIn("Valid GSP letters", str(ctx.exception))
 
     async def test_schema_violations_are_errors_and_make_no_request(self):
         for label, args in {
             "unknown region": {**PROFILE, "region": "Z"},
             "zero usage": {**PROFILE, "average_usage_kwh": 0},
             "negative usage": {**PROFILE, "average_usage_kwh": -5},
-            "missing has_ev": {k: v for k, v in PROFILE.items() if k != "has_ev"},
             "bad pattern": {**PROFILE, "ev_charging_pattern": "sometimes"},
+            "zero kWp": {**PROFILE, "solar_kwp": 0},
+            "negative EV kWh": {**PROFILE, "ev_annual_kwh": -1},
         }.items():
             with self.subTest(label):
                 result = await self.call("recommend_tariff", args)
@@ -199,6 +222,72 @@ class RecommendTariffTests(McpTestCase):
         with mock.patch.object(mcp_server, "market_cache", mcp_server.MarketCache(fetch=spy)):
             await self.call("recommend_tariff", PROFILE)
         self.assertEqual(seen, [False])
+
+
+@needs_mcp
+class AnswerFirstThenRefineTests(McpTestCase):
+    """A vague first prompt still gets a full answer, plus the list of inputs to replace the assumptions."""
+
+    async def assumed(self, arguments):
+        result = await self.call("recommend_tariff", arguments)
+        self.assertFalse(result.is_error, text_of(result))
+        return result.structured_content
+
+    async def test_no_inputs_at_all_still_returns_a_recommendation(self):
+        data = await self.assumed({})
+        self.assertTrue(data["recommendations"])
+        self.assertTrue(data["based_on_assumptions"])
+        self.assertEqual(data["data_source"]["region_name"], "London")
+        self.assertEqual([a["input"] for a in data["assumed_inputs"]], ["region", "average_usage_kwh", "has_solar", "has_ev", "has_battery"])
+
+    async def test_a_prompt_about_an_ev_and_solar_lists_everything_it_left_out(self):
+        data = await self.assumed({"has_ev": True, "has_solar": True})
+        self.assertEqual([a["question"] for a in data["assumed_inputs"]], [
+            "the postcode of the property",
+            "the total annual usage, including annual EV charging consumption",
+            "the size of the solar array (kWp)",
+            "the annual EV charging consumption (kWh)",
+            "the EV charging pattern: off-peak only, or a mix of off-peak and peak",
+            "whether the home has battery storage",
+        ])
+
+    async def test_each_assumption_states_what_was_assumed(self):
+        data = await self.assumed({"has_ev": True})
+        for entry in data["assumed_inputs"]:
+            with self.subTest(entry["input"]):
+                self.assertTrue(entry["assumed"])
+        pattern = next(a for a in data["assumed_inputs"] if a["input"] == "ev_charging_pattern")
+        self.assertIn("mixed", pattern["assumed"])
+
+    async def test_the_list_shrinks_as_the_user_supplies_inputs(self):
+        profile = {"has_ev": True, "has_solar": True}
+        counts = []
+        for extra in ({}, {"region": "C"}, {"average_usage_kwh": 5000}, {"solar_kwp": 4}, {"ev_annual_kwh": 2000},
+                      {"ev_charging_pattern": "overnight"}, {"has_battery": False}):
+            profile = {**profile, **extra}
+            counts.append(len((await self.assumed(profile))["assumed_inputs"]))
+        self.assertEqual(counts, [6, 5, 4, 3, 2, 1, 0])
+
+    async def test_a_fully_specified_prompt_makes_no_offer(self):
+        data = await self.assumed({**PROFILE, "ev_annual_kwh": 2000, "has_battery": False})
+        self.assertEqual(data["assumed_inputs"], [])
+        self.assertFalse(data["based_on_assumptions"])
+
+    async def test_solar_size_is_only_asked_when_there_is_solar(self):
+        self.assertNotIn("solar_kwp", [a["input"] for a in (await self.assumed({"has_solar": False}))["assumed_inputs"]])
+        self.assertIn("solar_kwp", [a["input"] for a in (await self.assumed({"has_solar": True}))["assumed_inputs"]])
+
+    async def test_an_assumed_answer_is_not_cached_as_a_different_region(self):
+        """Assuming London must not leak into a later request that names another region."""
+        await self.assumed({})
+        data = await self.assumed({"region": "N"})
+        self.assertEqual(data["data_source"]["region_name"], "Southern Scotland")
+        self.assertNotIn("region", [a["input"] for a in data["assumed_inputs"]])
+
+    async def test_vague_prompt_needs_only_the_normal_set_of_api_requests(self):
+        await self.assumed({})
+        self.assertTrue(self.stub.calls)
+        self.assertTrue(all("industry" not in c for c in self.stub.calls), "no postcode lookup unless find_region is called")
 
 
 @needs_mcp
@@ -323,10 +412,12 @@ class StdioSmokeTest(unittest.IsolatedAsyncioTestCase):
             async with Client(params) as client:
                 names = {t.name for t in (await client.list_tools()).tools}
                 result = await client.call_tool("list_regions", {})
-                return names, result
+                return names, result, client.session.instructions
 
-        names, result = await asyncio.wait_for(scenario(), timeout=60)
+        names, result, instructions = await asyncio.wait_for(scenario(), timeout=60)
         self.assertEqual(names, {"recommend_tariff", "find_region", "list_regions"})
+        self.assertIn("Answer first", instructions)  # the agent behaviour actually reaches the client over the wire
+        self.assertIn("assumed_inputs", instructions)
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content, core.REGIONS)  # a clean parse proves nothing polluted stdout
 

@@ -44,8 +44,8 @@ python cli.py --config profile.example.json --json
 |------|---------|
 | `--region` | GSP region letter A-P. **Required.** |
 | `--usage-kwh` | Annual electricity use in kWh, **including EV charging**. Required. |
-| `--solar`, `--export-kw` | Has solar panels; array / export capacity in kW if known (defaults to 4 kW). |
-| `--ev`, `--ev-pattern`, `--ev-kwh-per-week` | Has an EV; `overnight`, `daytime` or `flexible`; rough weekly charging energy (defaults to 40 kWh). |
+| `--solar`, `--export-kw` | Has solar panels; array size in kWp if known (defaults to 4 kWp). |
+| `--ev`, `--ev-pattern`, `--ev-kwh-per-week` | Has an EV; `overnight` (off-peak only), `mixed` (a mix of off-peak and peak), `daytime` or `flexible`; rough weekly charging energy (defaults to 40 kWh). |
 | `--battery`, `--battery-kwh`, `--battery-shifts` | Has a home battery; its capacity; whether it can charge at off-peak times and discharge at peak. |
 | `--json` | Print the full result as JSON. |
 
@@ -58,14 +58,17 @@ result = recommend_tariff({
     "region": "C",
     "average_usage_kwh": 4500,
     "has_solar": True,
-    "export_capacity_kw": 4,
+    "solar_kwp": 4,
     "has_ev": True,
-    "ev_charging_pattern": "overnight",
+    "ev_charging_pattern": "overnight",   # or "mixed", "daytime", "flexible"
+    "ev_annual_kwh": 2500,                # or "ev_kwh_per_week"
 })
 print(result["summary"])
 ```
 
 Bad input raises `ProfileError`; network problems raise `OctopusApiError`. The calling interface decides how to present them.
+
+The core is **strict by default**: `region`, `average_usage_kwh`, `has_solar` and `has_ev` are required. Pass `allow_assumptions=True` and nothing is required: every missing input is filled with a stated assumption and reported in the result (see [First answer, then refine](#first-answer-then-refine)). The CLI stays strict; the MCP server opts in.
 
 ## MCP server
 
@@ -73,17 +76,38 @@ Bad input raises `ProfileError`; network problems raise `OctopusApiError`. The c
 
 | Tool | What it does |
 |------|--------------|
-| `recommend_tariff` | The main tool. Takes the household profile as typed arguments (`region`, `average_usage_kwh`, `has_solar`, `has_ev` are required; solar size, EV pattern and weekly kWh, and battery details are optional) and returns the ranked recommendations, reasons, caveats and assumptions. |
+| `recommend_tariff` | The main tool. Takes the household profile as typed arguments and returns the ranked recommendations, reasons, caveats and assumptions. **Every argument is optional**: it answers from whatever it is given and reports what it assumed. |
 | `find_region` | Turns a full UK postcode into the electricity region letter that `recommend_tariff` needs, using Octopus's public grid-supply-points lookup. If a postcode straddles two regions it says so instead of guessing. |
 | `list_regions` | Lists the region letters and names. Works offline. |
 
 All three tools are read-only. A few behaviours worth knowing:
 
-- **Errors keep their message.** Bad input (for example an EV with no charging pattern) comes back as a tool error that names the field, so the model can correct itself and retry.
+- **Errors keep their message.** Bad input (for example an unknown region or a negative usage) comes back as a tool error that names the field, so the model can correct itself and retry.
 - **Validation happens before any network call**, so invalid input never triggers an API request.
 - **Rates are cached for 10 minutes per region** in the server (not in the core), because one recommendation makes about a dozen API requests and a conversation tends to ask several times.
 - **Privacy:** a postcode is sent to Octopus only when `find_region` is called. It is not logged or stored.
 - The server instructions and tool descriptions repeat the "informational, not financial or regulated switching advice" framing so the client relays it.
+
+### First answer, then refine
+
+The server tells the model (through its `instructions`, repeated in the `recommend_tariff` description) to behave like this:
+
+1. **Answer first.** After the user's first message it calls `recommend_tariff` straight away, even when inputs are missing. It passes only what the user actually said and never invents values.
+2. **State the assumptions** the answer rests on.
+3. **End with an offer to refine:** a short line inviting the user to replace the assumptions, then a bullet list of *every* input that was missing. Later replies re-run the recommendation with everything known so far and list only what is still assumed. Once nothing is assumed, no offer is made.
+
+The facts behind step 3 come from the tool result rather than the model's memory, so the list cannot be forgotten or invented. Each result carries `based_on_assumptions` and `assumed_inputs`: a list of `{input, question, assumed}` in a fixed order. For a first message like "I have an EV and solar panels" it is:
+
+- the postcode of the property *(assumed: London, region C)*
+- the total annual usage, including annual EV charging consumption *(assumed: about 2,500 kWh a year for a typical home plus 2,080 kWh a year of EV charging)*
+- the size of the solar array (kWp) *(assumed: a 4 kWp array)*
+- the annual EV charging consumption (kWh) *(assumed: about 2,080 kWh a year)*
+- the EV charging pattern: off-peak only, or a mix of off-peak and peak *(assumed: mixed, 70% off-peak and 30% peak)*
+- whether the home has battery storage *(assumed: no home battery)*
+
+Defaults used when an input is missing (all listed in the result's `assumptions`): region London (C); about 2,500 kWh a year for a home before any EV (a round "typical household" figure, not a quoted Ofgem value); no solar, EV or battery unless stated; EV charging split 70% off-peak and 30% in the evening peak. A follow-up question appears only when it is relevant: the solar size is asked only if there is solar, the battery size only if there is a battery, and so on. Answers "no" to yes/no questions count as answers, not assumptions.
+
+This relies on the model following the instructions. The list itself is data and is reliably correct, but whether a given client presents the closing offer is up to that client's model.
 
 ### Install and run
 
@@ -136,7 +160,7 @@ Three offline suites (standard-library `unittest`, no network):
 | `test_core.py` | The recommendation engine against a hand-built `Market`: archetype classification, ranking, Agile demotion, battery shifting, export handling, profile validation, UK time/BST handling, rate parsing, and a check that `core.py` stays free of CLI code. |
 | `test_api.py` | The API layer against **saved real API responses**, with `core._get_json` replaced by a playback stub: product discovery and filtering, per-region tariff lookup, the `varying` payment-method key on Flexible Octopus, rate windows, pagination, retry and error handling, and end-to-end recommendations on recorded rates. |
 
-| `test_mcp_server.py` | The MCP adapter through an in-memory MCP client, with the recorded API responses behind it: the tool list and schemas, results matching the core exactly, error mapping, validate-before-fetch, the rate cache (including concurrent callers), `find_region`, a real stdio subprocess handshake, and checks that the core never imports MCP and the adapter never prints or holds tariff logic. Skipped automatically when `mcp` is not installed. |
+| `test_mcp_server.py` | The MCP adapter through an in-memory MCP client, with the recorded API responses behind it: the tool list and schemas (no required inputs), results matching the core exactly, the answer-first flow (a vague prompt still gets an answer and the assumed-inputs list shrinks as inputs arrive), error mapping, the rate cache (including concurrent callers), `find_region`, a real stdio subprocess handshake that also checks the instructions reach the client, and checks that the core never imports MCP and the adapter never prints or holds tariff logic. Skipped automatically when `mcp` is not installed. |
 
 ```bash
 python -m unittest -v test_core test_api            # standard library only
