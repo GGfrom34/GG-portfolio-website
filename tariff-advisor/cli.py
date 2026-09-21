@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--solar", action="store_true", default=None, help="household has solar panels")
     p.add_argument("--export-kw", type=float, help="solar array / export capacity in kW, if known")
     p.add_argument("--ev", action="store_true", default=None, help="household has an EV")
-    p.add_argument("--ev-pattern", choices=["overnight", "daytime", "flexible"], help="how the EV is charged")
+    p.add_argument("--ev-pattern", choices=["overnight", "mixed", "daytime", "flexible"], help="how the EV is charged (overnight = off-peak only; mixed = off-peak and peak)")
     p.add_argument("--ev-kwh-per-week", type=float, help="rough EV charging energy per week")
     p.add_argument("--battery", action="store_true", default=None, help="household has home battery storage")
     p.add_argument("--battery-kwh", type=float, help="battery capacity in kWh")
@@ -90,6 +90,11 @@ def render(result: dict[str, Any]) -> str:
     if src["unavailable_products"]:
         out.append("")
         out.append("Not available for this region: " + ", ".join(src["unavailable_products"]))
+    if result["assumed_inputs"]:
+        out.append("")
+        out.append("This estimate assumes the following. To improve it, provide:")
+        for a in result["assumed_inputs"]:
+            out.append(f"  - {a['question']}  (assumed: {a['assumed']})")
     out.append("")
     out.append("Key assumptions (all estimates depend on these):")
     for key, value in result["assumptions"].items():

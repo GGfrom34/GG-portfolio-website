@@ -33,16 +33,28 @@ MARKET_CACHE_TTL_S = 600.0  # 10 minutes
 # Kept explicit so the tool schema shows the model an enum. test_mcp_server.py asserts
 # this matches core.REGIONS, so the two cannot drift apart.
 RegionLetter = Literal["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "L", "M", "N", "P"]
-EvPattern = Literal["overnight", "daytime", "flexible"]
+EvPattern = Literal["overnight", "mixed", "daytime", "flexible"]
 
 INSTRUCTIONS = (
     "Explores Octopus Energy tariffs for a UK household using live public rates. This is an "
     "informational aid, not financial advice or regulated switching advice, and it is not "
-    "affiliated with Octopus Energy. All costs are estimates built on the assumptions returned "
-    "in each result. When presenting a recommendation, include the key reasons, caveats and "
-    "assumptions, say that figures are estimates, and suggest checking octopus.energy before "
-    "any switch. The region is required: use find_region with a postcode, or list_regions, "
-    "rather than guessing one."
+    "affiliated with Octopus Energy. All costs are estimates built on stated assumptions.\n\n"
+    "How to behave:\n"
+    "1. Answer first. After the user's first message, always call recommend_tariff straight away, "
+    "even when inputs are missing. Pass only what the user actually said and leave everything else "
+    "out: never invent values, and do not ask questions before answering. If they give a postcode, "
+    "call find_region first and pass its region.\n"
+    "2. Present the recommendation and say plainly which assumptions it rests on "
+    "(see based_on_assumptions and assumed_inputs in the result).\n"
+    "3. End that answer by offering a more accurate estimate: one short sentence inviting the user to "
+    "replace the assumptions, followed by a bullet list of the `question` of EVERY entry in "
+    "assumed_inputs, each once and in the order given. Do not add questions that are not in the list "
+    "and do not leave any out.\n"
+    "4. When the user replies with more detail, call recommend_tariff again with everything known so "
+    "far, and again end by listing only the questions still in assumed_inputs. If assumed_inputs is "
+    "empty, do not make the offer.\n"
+    "5. Always say the figures are estimates, include the key reasons and caveats, and suggest "
+    "checking octopus.energy before any switch."
 )
 
 _LOOKUP = ToolAnnotations(read_only_hint=True, idempotent_hint=True, destructive_hint=False, open_world_hint=True)
@@ -75,7 +87,7 @@ class MarketCache:
 
 market_cache = MarketCache()
 
-mcp = MCPServer("octopus-tariff-advisor", instructions=INSTRUCTIONS, version="0.1.0")
+mcp = MCPServer("octopus-tariff-advisor", instructions=INSTRUCTIONS, version="0.2.0")
 
 
 def _run(call: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -95,18 +107,23 @@ def _run(call: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict
 
 @mcp.tool(title="Recommend Octopus tariffs", annotations=_LOOKUP)
 def recommend_tariff(
-    region: Annotated[RegionLetter, Field(description="Electricity region letter A-P (C is London, N is Southern Scotland). Use find_region with a postcode if unknown.")],
-    average_usage_kwh: Annotated[float, Field(gt=0, description="Annual electricity use in kWh for the whole household, including any EV charging.")],
-    has_solar: Annotated[bool, Field(description="Whether the property has solar panels.")],
-    has_ev: Annotated[bool, Field(description="Whether the household charges an electric vehicle at home.")],
-    export_capacity_kw: Annotated[Optional[float], Field(gt=0, description="Solar array size in kW, if known (assumed 4 kW when has_solar and omitted).")] = None,
-    ev_charging_pattern: Annotated[Optional[EvPattern], Field(description="Required when has_ev is true: 'overnight' (scheduled at night), 'daytime', or 'flexible' (can follow cheap half-hours).")] = None,
-    ev_kwh_per_week: Annotated[Optional[float], Field(gt=0, description="Rough EV charging energy per week (assumed 40 kWh when omitted).")] = None,
-    has_battery: Annotated[bool, Field(description="Whether the property has home battery storage.")] = False,
-    battery_kwh: Annotated[Optional[float], Field(gt=0, description="Battery capacity in kWh (assumed 5 kWh when omitted).")] = None,
-    battery_can_shift_to_offpeak: Annotated[Optional[bool], Field(description="Whether the battery can charge from the grid at cheap times and discharge at peak. Ask if unknown; assumed false when omitted.")] = None,
+    region: Annotated[Optional[RegionLetter], Field(description="Electricity region letter A-P (C is London, N is Southern Scotland). Use find_region with the postcode. Omit if unknown.")] = None,
+    average_usage_kwh: Annotated[Optional[float], Field(gt=0, description="Total annual electricity use in kWh for the whole household, including any EV charging. Omit if unknown.")] = None,
+    has_solar: Annotated[Optional[bool], Field(description="Whether the property has solar panels. Omit unless the user said.")] = None,
+    has_ev: Annotated[Optional[bool], Field(description="Whether the household charges an electric vehicle at home. Omit unless the user said.")] = None,
+    solar_kwp: Annotated[Optional[float], Field(gt=0, description="Size of the solar array in kWp. Omit if unknown.")] = None,
+    ev_annual_kwh: Annotated[Optional[float], Field(gt=0, description="Annual EV charging consumption in kWh. Omit if unknown.")] = None,
+    ev_charging_pattern: Annotated[Optional[EvPattern], Field(description="How the EV is charged: 'overnight' (off-peak only), 'mixed' (a mix of off-peak and peak), 'daytime', or 'flexible' (can follow cheap half-hours). Omit if unknown.")] = None,
+    has_battery: Annotated[Optional[bool], Field(description="Whether the property has home battery storage. Omit unless the user said.")] = None,
+    battery_kwh: Annotated[Optional[float], Field(gt=0, description="Home battery size in kWh. Omit if unknown.")] = None,
+    battery_can_shift_to_offpeak: Annotated[Optional[bool], Field(description="Whether the battery can charge from the grid at cheap times and discharge at peak. Omit if unknown.")] = None,
 ) -> dict[str, Any]:
-    """Recommend the best-fit Octopus tariffs for a household and explain why.
+    """Recommend the best-fit Octopus tariffs for a household and explain why, even from a partial description.
+
+    Call this straight away with whatever the user has said: every input is optional, and anything
+    omitted is filled in with a stated assumption. Never invent values. The result lists each
+    assumption in `assumed_inputs` with the `question` that would replace it: end your answer by
+    offering a more accurate estimate and listing all of those questions.
 
     Compares Flexible Octopus (standard variable), Agile, Go and Cosy for import, and Outgoing
     and Agile Outgoing for solar export, using current public rates. Returns ranked
@@ -115,13 +132,12 @@ def recommend_tariff(
     """
     given = {
         "region": region, "average_usage_kwh": average_usage_kwh, "has_solar": has_solar, "has_ev": has_ev,
-        "export_capacity_kw": export_capacity_kw, "ev_charging_pattern": ev_charging_pattern,
-        "ev_kwh_per_week": ev_kwh_per_week, "has_battery": has_battery, "battery_kwh": battery_kwh,
-        "battery_can_shift_to_offpeak": battery_can_shift_to_offpeak,
+        "solar_kwp": solar_kwp, "ev_charging_pattern": ev_charging_pattern, "ev_annual_kwh": ev_annual_kwh,
+        "has_battery": has_battery, "battery_kwh": battery_kwh, "battery_can_shift_to_offpeak": battery_can_shift_to_offpeak,
     }
-    profile = {k: v for k, v in given.items() if v is not None}  # omitted stays omitted, so core can warn about assumed defaults
+    profile = {k: v for k, v in given.items() if v is not None}  # omitted stays omitted, so the core reports it as assumed
     # fetcher= (not market=) lets core validate the profile before any network call.
-    return _run(lambda: core.recommend_tariff(profile, fetcher=market_cache))
+    return _run(lambda: core.recommend_tariff(profile, fetcher=market_cache, allow_assumptions=True))
 
 
 @mcp.tool(title="Find electricity region from postcode", annotations=_LOOKUP)

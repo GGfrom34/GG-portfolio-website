@@ -307,5 +307,211 @@ class ArchitectureTests(unittest.TestCase):
         self.assertFalse(called & {"print", "input", "exit", "quit"}, called)
 
 
+def assume(profile, market=None):
+    return core.recommend_tariff(profile, market=market or make_market(), allow_assumptions=True)
+
+
+def inputs_of(result):
+    return [a["input"] for a in result["assumed_inputs"]]
+
+
+class AssumptionTests(unittest.TestCase):
+    """allow_assumptions=True: answer from whatever was given, and report what was assumed."""
+
+    def test_empty_profile_still_gets_an_answer_from_defaults(self):
+        result = assume({})
+        self.assertEqual(result["archetype"], "neither")
+        self.assertEqual(result["data_source"]["region"], "_C")
+        self.assertEqual(result["data_source"]["region_name"], "London")
+        self.assertTrue(result["based_on_assumptions"])
+        self.assertEqual(inputs_of(result), ["region", "average_usage_kwh", "has_solar", "has_ev", "has_battery"])
+        self.assertTrue(result["recommendations"])
+
+    def test_ev_only_prompt_asks_about_everything_it_did_not_say(self):
+        result = assume({"has_ev": True})
+        self.assertEqual(inputs_of(result), ["region", "average_usage_kwh", "has_solar", "ev_annual_kwh", "ev_charging_pattern", "has_battery"])
+        self.assertEqual(result["archetype"], "ev_daytime_flexible")  # the assumed mixed pattern
+
+    def test_assumed_usage_is_a_total_that_includes_the_ev(self):
+        with_ev = {a["input"]: a for a in assume({"has_ev": True})["assumed_inputs"]}["average_usage_kwh"]
+        self.assertIn("2,500", with_ev["assumed"])
+        self.assertIn("2,080", with_ev["assumed"])
+        self.assertIn("including annual EV charging", with_ev["question"])
+        without_ev = {a["input"]: a for a in assume({})["assumed_inputs"]}["average_usage_kwh"]
+        self.assertNotIn("EV", without_ev["assumed"])
+        self.assertNotIn("including annual EV charging", without_ev["question"])
+
+    def test_the_questions_use_the_agreed_wording(self):
+        everything_missing = {"has_solar": True, "has_ev": True, "has_battery": True}
+        questions = {a["input"]: a["question"] for a in assume(everything_missing)["assumed_inputs"]}
+        self.assertEqual(questions, {
+            "region": "the postcode of the property",
+            "average_usage_kwh": "the total annual usage, including annual EV charging consumption",
+            "solar_kwp": "the size of the solar array (kWp)",
+            "ev_annual_kwh": "the annual EV charging consumption (kWh)",
+            "ev_charging_pattern": "the EV charging pattern: off-peak only, or a mix of off-peak and peak",
+            "battery_kwh": "the home battery size (kWh)",
+            "battery_can_shift_to_offpeak": "whether the battery can charge from the grid at off-peak times and discharge at peak",
+        })
+
+    def test_questions_are_reported_in_a_fixed_order(self):
+        result = assume({"has_solar": True, "has_ev": True, "has_battery": True})
+        self.assertEqual(inputs_of(result), ["region", "average_usage_kwh", "solar_kwp", "ev_annual_kwh", "ev_charging_pattern", "battery_kwh", "battery_can_shift_to_offpeak"])
+
+    def test_inputs_the_user_provided_are_never_listed(self):
+        full = {"region": "N", "average_usage_kwh": 5000, "has_solar": True, "solar_kwp": 5, "has_ev": True, "ev_annual_kwh": 2500,
+                "ev_charging_pattern": "overnight", "has_battery": True, "battery_kwh": 10, "battery_can_shift_to_offpeak": True}
+        result = assume(full)
+        self.assertEqual(result["assumed_inputs"], [])
+        self.assertFalse(result["based_on_assumptions"])
+
+    def test_each_provided_field_removes_exactly_its_own_question(self):
+        base = {"has_solar": True, "has_ev": True, "has_battery": True}
+        before = set(inputs_of(assume(base)))
+        for extra, gone in [({"region": "H"}, "region"), ({"average_usage_kwh": 4000}, "average_usage_kwh"), ({"solar_kwp": 3.5}, "solar_kwp"),
+                            ({"ev_annual_kwh": 2000}, "ev_annual_kwh"), ({"ev_charging_pattern": "overnight"}, "ev_charging_pattern"),
+                            ({"battery_kwh": 8}, "battery_kwh"), ({"battery_can_shift_to_offpeak": False}, "battery_can_shift_to_offpeak")]:
+            with self.subTest(gone):
+                self.assertEqual(before - set(inputs_of(assume({**base, **extra}))), {gone})
+
+    def test_explicit_no_is_an_answer_not_an_assumption(self):
+        result = assume({"has_solar": False, "has_ev": False, "has_battery": False})
+        self.assertEqual(inputs_of(result), ["region", "average_usage_kwh"])
+
+    def test_features_left_out_are_assumed_absent_and_listed(self):
+        result = assume({"region": "C", "average_usage_kwh": 3000})
+        self.assertEqual(inputs_of(result), ["has_solar", "has_ev", "has_battery"])
+        self.assertEqual(result["archetype"], "neither")
+
+    def test_input_that_is_present_gets_its_follow_up_questions_only_when_present(self):
+        no_solar = assume({"has_solar": False})
+        self.assertNotIn("solar_kwp", inputs_of(no_solar))
+        self.assertIn("solar_kwp", inputs_of(assume({"has_solar": True})))
+        self.assertNotIn("ev_charging_pattern", inputs_of(assume({"has_ev": False})))
+        self.assertNotIn("battery_kwh", inputs_of(assume({"has_battery": False})))
+
+    def test_assumed_ev_pattern_is_mixed_and_says_so(self):
+        entry = next(a for a in assume({"has_ev": True})["assumed_inputs"] if a["input"] == "ev_charging_pattern")
+        self.assertIn("mixed", entry["assumed"])
+        self.assertIn("70% off-peak", entry["assumed"])
+
+    def test_values_are_still_validated_when_assuming(self):
+        for label, profile in {
+            "bad region": {"region": "Z"},
+            "negative usage": {"average_usage_kwh": -1},
+            "bad pattern": {"has_ev": True, "ev_charging_pattern": "sometimes"},
+            "string bool": {"has_solar": "yes"},
+        }.items():
+            with self.subTest(label):
+                with self.assertRaises(core.ProfileError):
+                    assume(profile)
+
+    def test_invalid_input_fails_before_any_fetch(self):
+        def boom(region):
+            raise AssertionError("fetcher must not be called for an invalid profile")
+        with self.assertRaises(core.ProfileError):
+            core.recommend_tariff({"average_usage_kwh": -1}, fetcher=boom, allow_assumptions=True)
+
+    def test_result_stays_json_serialisable(self):
+        result = assume({"has_solar": True, "has_ev": True, "has_battery": True})
+        self.assertEqual(json.loads(json.dumps(result)), result)
+        for entry in result["assumed_inputs"]:
+            self.assertEqual(set(entry), {"input", "question", "assumed"})
+
+    def test_strict_mode_is_unchanged_and_still_requires_region(self):
+        with self.assertRaises(core.ProfileError):
+            core.recommend_tariff({}, market=make_market())
+        with self.assertRaises(core.ProfileError):
+            core.recommend_tariff({"average_usage_kwh": 3000, "has_solar": False, "has_ev": False}, market=make_market())
+
+    def test_strict_mode_reports_only_optional_details_it_defaulted(self):
+        full_neither = core.recommend_tariff({"region": "C", "average_usage_kwh": 3000, "has_solar": False, "has_ev": False}, market=make_market())
+        self.assertEqual(full_neither["assumed_inputs"], [])
+        self.assertFalse(full_neither["based_on_assumptions"])
+        solar_no_size = core.recommend_tariff({"region": "C", "average_usage_kwh": 3000, "has_solar": True, "has_ev": False}, market=make_market())
+        self.assertEqual(inputs_of(solar_no_size), ["solar_kwp"])
+        self.assertTrue(solar_no_size["based_on_assumptions"])
+
+
+class ProfileKeyAliasTests(unittest.TestCase):
+    SOLAR = {"region": "C", "average_usage_kwh": 4000, "has_solar": True, "has_ev": False}
+
+    def test_solar_kwp_and_export_capacity_kw_mean_the_same(self):
+        self.assertEqual(run({**self.SOLAR, "solar_kwp": 5}), run({**self.SOLAR, "export_capacity_kw": 5}))
+
+    def test_conflicting_solar_sizes_are_rejected_but_matching_ones_are_fine(self):
+        with self.assertRaises(core.ProfileError):
+            run({**self.SOLAR, "solar_kwp": 4, "export_capacity_kw": 6})
+        run({**self.SOLAR, "solar_kwp": 4, "export_capacity_kw": 4})
+
+    def test_annual_ev_kwh_equals_the_same_weekly_figure(self):
+        ev = {"region": "C", "average_usage_kwh": 5000, "has_solar": False, "has_ev": True, "ev_charging_pattern": "overnight"}
+        self.assertEqual(run({**ev, "ev_annual_kwh": 2600}), run({**ev, "ev_kwh_per_week": 50}))
+
+    def test_giving_both_ev_figures_is_rejected(self):
+        with self.assertRaises(core.ProfileError):
+            run({"region": "C", "average_usage_kwh": 5000, "has_solar": False, "has_ev": True, "ev_charging_pattern": "overnight",
+                 "ev_annual_kwh": 2600, "ev_kwh_per_week": 50})
+
+    def test_annual_ev_figure_is_used_and_more_ev_on_the_same_base_costs_more(self):
+        flat = tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48)
+        base = 3000  # household use excluding the EV, held constant
+        costs = {}
+        for ev_kwh in (1000, 4000):
+            profile = core.validate_profile({"region": "C", "average_usage_kwh": base + ev_kwh, "has_solar": False, "has_ev": True,
+                                             "ev_charging_pattern": "daytime", "ev_annual_kwh": ev_kwh})
+            breakdown = core._cost_for_tariff(profile, flat)
+            self.assertAlmostEqual(breakdown.ev_kwh, ev_kwh)
+            costs[ev_kwh] = breakdown.import_cost_gbp
+        self.assertLess(costs[1000], costs[4000])
+
+
+class MixedEvPatternTests(unittest.TestCase):
+    GO = slots(30.99, {(1, 11): 8.63})
+    OVERNIGHT = set(core._window_slots("23:00-07:00"))
+    EVENING = set(core._window_slots("17:00-22:00"))
+
+    def test_mixed_charging_is_split_between_the_cheap_window_and_the_evening(self):
+        load = core._place_ev("mixed", 10.0, self.GO)
+        self.assertAlmostEqual(sum(load), 10.0)
+        self.assertAlmostEqual(sum(load[s] for s in self.EVENING), 3.0)
+        self.assertAlmostEqual(sum(v for s, v in enumerate(load) if s in self.OVERNIGHT), 7.0)
+        self.assertTrue(all(load[s] == 0 for s in range(48) if s not in self.OVERNIGHT | self.EVENING))
+
+    def test_offpeak_share_lands_in_the_cheapest_slots(self):
+        load = core._place_ev("mixed", 10.0, self.GO)
+        self.assertAlmostEqual(sum(load[s] for s in range(1, 11)), 7.0)  # all of it in Go's 00:30-05:30 window
+
+    def test_mixed_costs_more_than_overnight_and_less_than_daytime_on_go(self):
+        go = tariff("go", "IMPORT", "Octopus Go", 44.1, self.GO)
+        price = {}
+        for pattern in ("overnight", "mixed", "daytime"):
+            profile = core.validate_profile({"region": "C", "average_usage_kwh": 5000, "has_solar": False, "has_ev": True, "ev_charging_pattern": pattern})
+            price[pattern] = core._cost_for_tariff(profile, go).ev_avg_p_kwh
+        self.assertLess(price["overnight"], price["mixed"])
+        self.assertLess(price["mixed"], price["daytime"])
+
+    def test_pattern_makes_no_difference_on_a_flat_tariff(self):
+        flat = tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48)
+        prices = {p: core._cost_for_tariff(core.validate_profile({"region": "C", "average_usage_kwh": 5000, "has_solar": False, "has_ev": True, "ev_charging_pattern": p}), flat).ev_avg_p_kwh
+                  for p in core.EV_PATTERNS}
+        for value in prices.values():
+            self.assertAlmostEqual(value, 26.35)
+
+    def test_mixed_is_accepted_and_classified_with_the_non_overnight_ev_archetype(self):
+        profile = core.validate_profile({**BASE, "has_solar": False, "has_ev": True, "ev_charging_pattern": "mixed"})
+        self.assertEqual(core.classify_profile(profile), "ev_daytime_flexible")
+
+    def test_every_documented_pattern_is_accepted(self):
+        for pattern in ("overnight", "mixed", "daytime", "flexible"):
+            with self.subTest(pattern):
+                core.validate_profile({**BASE, "has_solar": False, "has_ev": True, "ev_charging_pattern": pattern})
+
+    def test_mixed_recommendation_flags_the_peak_share_on_time_of_use_tariffs(self):
+        result = run({"has_solar": False, "has_ev": True, "ev_charging_pattern": "mixed"})
+        go = next(r for r in result["recommendations"] + result["alternatives"] if r["family"] == "go")
+        self.assertTrue(any("Only about 70%" in c for c in go["caveats"]))
+
+
 if __name__ == "__main__":
     unittest.main()
