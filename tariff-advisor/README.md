@@ -12,14 +12,14 @@ The code is split into core logic and an interface, so the same logic can sit be
 |------|------|
 | `core.py` | All the logic. Calls the Octopus API, models the household, ranks tariffs. It has no knowledge of the command line or of any other interface: it does no printing, prompting or exiting. The single entry point is `recommend_tariff(profile: dict) -> dict`, which returns plain, JSON-serialisable data. |
 | `cli.py` | A thin command-line wrapper. It parses arguments into a profile dict, calls `core.recommend_tariff()`, and prints the result readably. It is the only file that knows about the command line. |
+| `mcp_server.py` | A thin [MCP](https://modelcontextprotocol.io) server: a second interface over the same `recommend_tariff()`. It maps typed tool arguments to a profile dict, calls the core, and turns core errors into MCP tool errors. It contains no tariff logic. |
 
-Inside `core.py` the API-calling code is kept apart from the recommendation logic. The API layer fetches rates and returns normalised `Tariff` / `Market` objects. The recommendation engine works on those objects with no network access, so it can be tested offline by passing a hand-built `Market` to `recommend_tariff(profile, market=...)`.
-
-**Planned next:** an MCP server as a second interface over the same `recommend_tariff()` function. Because `core.py` returns structured data rather than formatted text, it can be wrapped without changing the core.
+Inside `core.py` the API-calling code is kept apart from the recommendation logic. The API layer fetches rates and returns normalised `Tariff` / `Market` objects. The recommendation engine works on those objects with no network access, so it can be tested offline by passing a hand-built `Market` to `recommend_tariff(profile, market=...)`. Both interfaces reuse the core unchanged, because it returns structured data rather than formatted text.
 
 ## Requirements
 
-Python 3.9 or later. No third-party packages. No API key is needed, because only Octopus's public product and rate endpoints are used.
+- **Core and CLI:** Python 3.9 or later, standard library only. No API key is needed, because only Octopus's public product and rate endpoints are used.
+- **MCP server:** Python 3.10 or later and the `mcp` package (v2), installed from `requirements-mcp.txt` (see [MCP server](#mcp-server)). The core and CLI never import it.
 
 ## Usage
 
@@ -67,24 +67,87 @@ print(result["summary"])
 
 Bad input raises `ProfileError`; network problems raise `OctopusApiError`. The calling interface decides how to present them.
 
+## MCP server
+
+`mcp_server.py` lets an MCP client (Claude Desktop, Claude Code, or any other) use the advisor as tools. It runs over **stdio**: the client launches it as a local subprocess, so nothing is exposed on the network and there is no authentication to manage.
+
+| Tool | What it does |
+|------|--------------|
+| `recommend_tariff` | The main tool. Takes the household profile as typed arguments (`region`, `average_usage_kwh`, `has_solar`, `has_ev` are required; solar size, EV pattern and weekly kWh, and battery details are optional) and returns the ranked recommendations, reasons, caveats and assumptions. |
+| `find_region` | Turns a full UK postcode into the electricity region letter that `recommend_tariff` needs, using Octopus's public grid-supply-points lookup. If a postcode straddles two regions it says so instead of guessing. |
+| `list_regions` | Lists the region letters and names. Works offline. |
+
+All three tools are read-only. A few behaviours worth knowing:
+
+- **Errors keep their message.** Bad input (for example an EV with no charging pattern) comes back as a tool error that names the field, so the model can correct itself and retry.
+- **Validation happens before any network call**, so invalid input never triggers an API request.
+- **Rates are cached for 10 minutes per region** in the server (not in the core), because one recommendation makes about a dozen API requests and a conversation tends to ask several times.
+- **Privacy:** a postcode is sent to Octopus only when `find_region` is called. It is not logged or stored.
+- The server instructions and tool descriptions repeat the "informational, not financial or regulated switching advice" framing so the client relays it.
+
+### Install and run
+
+From this folder (a virtual environment keeps the MCP dependencies away from the standard-library-only core):
+
+```bash
+python -m venv .venv
+# Windows:      .venv\Scripts\python.exe -m pip install -r requirements-mcp.txt
+# macOS/Linux:  .venv/bin/python -m pip install -r requirements-mcp.txt
+```
+
+Then start it (a client normally does this for you; running it by hand just waits for MCP messages on stdin):
+
+```bash
+# Windows:      .venv\Scripts\python.exe mcp_server.py
+# macOS/Linux:  .venv/bin/python mcp_server.py
+```
+
+### Register it with a client
+
+Use **absolute paths** to the virtual environment's Python and to `mcp_server.py`, since clients launch the server from their own working directory.
+
+Claude Code:
+
+```bash
+claude mcp add octopus-tariff-advisor -- /path/to/tariff-advisor/.venv/bin/python /path/to/tariff-advisor/mcp_server.py
+```
+
+Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "octopus-tariff-advisor": {
+      "command": "/path/to/tariff-advisor/.venv/bin/python",
+      "args": ["/path/to/tariff-advisor/mcp_server.py"]
+    }
+  }
+}
+```
+
+On Windows use `.venv\\Scripts\\python.exe` (backslashes doubled in JSON). Then ask something like: *"I'm at SW1A 1AA with solar panels and an EV that charges overnight, using about 4,000 kWh a year. Which Octopus tariffs should I look at?"*
+
 ## Tests
 
-Two offline suites (standard-library `unittest`, no network, no installs):
+Three offline suites (standard-library `unittest`, no network):
 
 | File | What it tests |
 |------|---------------|
 | `test_core.py` | The recommendation engine against a hand-built `Market`: archetype classification, ranking, Agile demotion, battery shifting, export handling, profile validation, UK time/BST handling, rate parsing, and a check that `core.py` stays free of CLI code. |
 | `test_api.py` | The API layer against **saved real API responses**, with `core._get_json` replaced by a playback stub: product discovery and filtering, per-region tariff lookup, the `varying` payment-method key on Flexible Octopus, rate windows, pagination, retry and error handling, and end-to-end recommendations on recorded rates. |
 
+| `test_mcp_server.py` | The MCP adapter through an in-memory MCP client, with the recorded API responses behind it: the tool list and schemas, results matching the core exactly, error mapping, validate-before-fetch, the rate cache (including concurrent callers), `find_region`, a real stdio subprocess handshake, and checks that the core never imports MCP and the adapter never prints or holds tariff logic. Skipped automatically when `mcp` is not installed. |
+
 ```bash
-python -m unittest -v test_core test_api
+python -m unittest -v test_core test_api            # standard library only
+.venv/bin/python -m unittest -v test_core test_api test_mcp_server   # everything, with mcp installed
 ```
 
 When you change the recommendation logic, add or adjust a test first. The engine tests assert on relationships (which tariff wins, what gets flagged), not on live prices, so they do not break when Octopus changes its rates.
 
 ### Saved API responses
 
-`api_fixtures.py` holds the recorder and the playback stub; the recording lives in `fixtures/api_responses.json` (about 250 KB: regions C and N at a fixed time, 19 responses). The recorder captures exactly what `core.py` requests, so playback fails loudly if `core.py` starts requesting something that was not recorded, and a test fails if a recorded response is no longer used.
+`api_fixtures.py` holds the recorder and the playback stub; the recording lives in `fixtures/api_responses.json` (about 250 KB: regions C and N at a fixed time, plus one postcode lookup; 20 responses). The recorder captures exactly what `core.py` requests, so playback fails loudly if `core.py` starts requesting something that was not recorded, and a test fails if a recorded response is no longer used.
 
 Re-record when `core.py`'s API requests change (new product family, different rate window), or to pick up a new Octopus response shape:
 

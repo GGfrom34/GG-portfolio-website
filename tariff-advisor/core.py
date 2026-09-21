@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import time
 import urllib.error
 import urllib.parse
@@ -349,6 +350,36 @@ def fetch_market(region: str, *, now: Optional[datetime] = None) -> Market:
     if not imports:
         raise OctopusApiError(f"No import tariffs found for region _{region}")
     return Market(region=region, fetched_at=now.isoformat(), import_tariffs=imports, export_tariffs=exports, unavailable=unavailable)
+
+
+_POSTCODE_RE = re.compile(r"^[A-Z]{1,2}[0-9][A-Z0-9]?[0-9][A-Z]{2}$")
+
+
+def lookup_region(postcode: str) -> dict[str, Any]:
+    """Find the electricity region (GSP letter) for a UK postcode via Octopus's public endpoint.
+
+    Returns {"postcode", "ambiguous", "region", "region_name", "candidates"}. `region` and
+    `region_name` are None when the postcode straddles regions (`ambiguous` is True), so the
+    caller can ask the household rather than guess. The postcode is sent to Octopus only for
+    this lookup and is not logged or stored. Raises ProfileError if the postcode is malformed
+    or unknown, and OctopusApiError on network problems.
+    """
+    compact = re.sub(r"\s+", "", str(postcode)).upper()
+    if not _POSTCODE_RE.match(compact):
+        raise ProfileError(f"{postcode!r} does not look like a full UK postcode (for example 'SW1A 1AA')")
+    results = _paginate(f"{API_BASE}/industry/grid-supply-points/", {"postcode": compact})
+    letters = sorted({str(r.get("group_id", "")).lstrip("_") for r in results} & set(REGIONS))
+    if not letters:
+        raise ProfileError(f"No electricity supply region was found for postcode {compact[:-3]} {compact[-3:]}")
+    candidates = [{"region": letter, "region_name": REGIONS[letter]} for letter in letters]
+    single = candidates[0] if len(candidates) == 1 else None
+    return {
+        "postcode": f"{compact[:-3]} {compact[-3:]}",
+        "ambiguous": single is None,
+        "region": single["region"] if single else None,
+        "region_name": single["region_name"] if single else None,
+        "candidates": candidates,
+    }
 
 
 # ---------------------------------------------------------------------------

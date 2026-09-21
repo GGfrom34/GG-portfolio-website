@@ -6,9 +6,20 @@
    "C",
    "N"
   ],
+  "postcode": "SW1A 1AA",
   "note": "Trimmed: product details keep only the recorded regions; rate records keep only the fields core reads."
  },
  "responses": {
+  "https://api.octopus.energy/v1/industry/grid-supply-points/?postcode=SW1A1AA": {
+   "count": 1,
+   "next": null,
+   "previous": null,
+   "results": [
+    {
+     "group_id": "_C"
+    }
+   ]
+  },
   "https://api.octopus.energy/v1/products/?brand=OCTOPUS_ENERGY&is_business=false&page_size=100": {
    "count": 30,
    "next": null,
