@@ -119,6 +119,8 @@ class DiscoveryAndParsingTests(unittest.TestCase):
         stub = Playback.load()
         for region in api_fixtures.RECORD_REGIONS:
             fetch(region, stub)
+        with mock.patch.object(core, "_get_json", stub):
+            core.lookup_region(api_fixtures.RECORD_POSTCODE)
         self.assertEqual(set(stub.calls), set(stub.responses))
 
 
@@ -229,6 +231,65 @@ class EndToEndTests(unittest.TestCase):
             with self.subTest(name):
                 result = self.recommend({**test_core.BASE, **extra})
                 self.assertEqual(result["archetype"], name)
+
+
+class LookupRegionTests(unittest.TestCase):
+    KEY = f"{API}/industry/grid-supply-points/?postcode=SW1A1AA"
+
+    def lookup(self, postcode, stub=None):
+        stub = stub or Playback.load()
+        with mock.patch.object(core, "_get_json", stub):
+            return core.lookup_region(postcode), stub
+
+    def test_recorded_postcode_resolves_to_a_single_region(self):
+        result, stub = self.lookup("SW1A 1AA")
+        self.assertEqual(result, {
+            "postcode": "SW1A 1AA", "ambiguous": False, "region": "C", "region_name": "London",
+            "candidates": [{"region": "C", "region_name": "London"}],
+        })
+        self.assertEqual(stub.calls, [self.KEY])
+
+    def test_postcode_is_normalised_before_the_request(self):
+        for variant in ("sw1a 1aa", "SW1A1AA", "  sw1a   1aa  ", "Sw1a\t1Aa"):
+            with self.subTest(variant):
+                result, stub = self.lookup(variant)
+                self.assertEqual(stub.calls, [self.KEY])  # compact and upper-cased; the recorded key
+                self.assertEqual(result["postcode"], "SW1A 1AA")
+
+    def test_postcode_spanning_regions_is_flagged_ambiguous_not_guessed(self):
+        stub = Playback.load()
+        stub.responses[self.KEY]["results"] = [{"group_id": "_C"}, {"group_id": "_A"}, {"group_id": "_C"}]
+        result, _ = self.lookup("SW1A 1AA", stub)
+        self.assertTrue(result["ambiguous"])
+        self.assertIsNone(result["region"])
+        self.assertIsNone(result["region_name"])
+        self.assertEqual([c["region"] for c in result["candidates"]], ["A", "C"])
+
+    def test_unknown_postcode_is_a_profile_error(self):
+        stub = Playback.load()
+        stub.responses[self.KEY]["results"] = []
+        with self.assertRaises(core.ProfileError) as ctx:
+            self.lookup("SW1A 1AA", stub)
+        self.assertIn("No electricity supply region", str(ctx.exception))
+
+    def test_unrecognised_group_ids_are_ignored(self):
+        stub = Playback.load()
+        stub.responses[self.KEY]["results"] = [{"group_id": "_Z"}, {"group_id": ""}, {}]
+        with self.assertRaises(core.ProfileError):
+            self.lookup("SW1A 1AA", stub)
+
+    def test_malformed_postcodes_are_rejected_without_any_request(self):
+        for bad in ("", "hello", "SW1A", "12345", "SW1A 1A", "SW1A 1AAA", "SW1A-1AA"):
+            with self.subTest(bad):
+                stub = Playback.load()
+                with self.assertRaises(core.ProfileError):
+                    self.lookup(bad, stub)
+                self.assertEqual(stub.calls, [], "a malformed postcode must never be sent to the API")
+
+    def test_api_failure_propagates_as_api_error(self):
+        with mock.patch.object(core, "_get_json", side_effect=core.OctopusApiError("down")):
+            with self.assertRaises(core.OctopusApiError):
+                core.lookup_region("SW1A 1AA")
 
 
 class PaginationTests(unittest.TestCase):

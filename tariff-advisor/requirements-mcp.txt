@@ -1,0 +1,2 @@
+# Only needed for mcp_server.py (Python 3.10+). core.py and cli.py are standard-library only.
+mcp>=2.2,<3

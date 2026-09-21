@@ -31,6 +31,7 @@ from typing import Any, Optional
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "api_responses.json"
 NOW = datetime(2026, 9, 21, 14, 0, tzinfo=timezone.utc)  # BST; every recorded window is relative to this
 RECORD_REGIONS = ("C", "N")
+RECORD_POSTCODE = "SW1A 1AA"  # a lookup_region call is recorded too
 RATE_FIELDS = ("value_inc_vat", "valid_from", "valid_to", "payment_method")
 
 
@@ -91,6 +92,7 @@ def record(path: Path = FIXTURE_PATH) -> int:
     try:
         for region in RECORD_REGIONS:
             core.fetch_market(region, now=NOW)
+        core.lookup_region(RECORD_POSTCODE)
     finally:
         core._get_json = real_get_json
 
@@ -99,6 +101,7 @@ def record(path: Path = FIXTURE_PATH) -> int:
             "recorded_from": core.API_BASE,
             "now": NOW.isoformat(),
             "regions": list(RECORD_REGIONS),
+            "postcode": RECORD_POSTCODE,
             "note": "Trimmed: product details keep only the recorded regions; rate records keep only the fields core reads.",
         },
         "responses": {k: _trim(k, v) for k, v in sorted(responses.items())},
