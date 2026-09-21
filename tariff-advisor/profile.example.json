@@ -1,0 +1,12 @@
+{
+  "region": "C",
+  "average_usage_kwh": 4500,
+  "has_solar": true,
+  "export_capacity_kw": 4,
+  "has_ev": true,
+  "ev_charging_pattern": "overnight",
+  "ev_kwh_per_week": 40,
+  "has_battery": true,
+  "battery_kwh": 10,
+  "battery_can_shift_to_offpeak": true
+}
