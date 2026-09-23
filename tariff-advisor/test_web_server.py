@@ -63,11 +63,14 @@ class FakeBlock:
 
 
 def text_block(text):
-    return FakeBlock(type="text", text=text)
+    # citations=None mirrors the real anthropic SDK's TextBlock, which carries response-only
+    # fields that must not be replayed verbatim into the next request (see serialize_assistant_block).
+    return FakeBlock(type="text", text=text, citations=None)
 
 
 def tool_use_block(id, name, input):
-    return FakeBlock(type="tool_use", id=id, name=name, input=input)
+    # caller/toolset_name=None mirror the real SDK's ToolUseBlock, for the same reason.
+    return FakeBlock(type="tool_use", id=id, name=name, input=input, caller=None, toolset_name=None)
 
 
 class FakeUsage:
@@ -198,6 +201,27 @@ class ChatToolLoopTests(unittest.TestCase):
         self.assertFalse(result_block["is_error"])
         result_payload = json.loads(result_block["content"])
         self.assertIn("recommendations", result_payload)
+
+    def test_assistant_history_omits_response_only_fields_the_api_rejects_on_replay(self):
+        """Regression test: the real anthropic SDK's TextBlock/ToolUseBlock carry response-only
+        fields (citations, caller, toolset_name) that the Messages API's request-side schema does
+        not accept back. Blindly replaying block.model_dump() into history broke every follow-up
+        turn. Assert the serialized history only ever carries the minimal, request-safe keys."""
+        self.set_client(
+            (["Checking…"], FakeMessage([tool_use_block("t1", "recommend_tariff", {"region": "C"})], "tool_use")),
+            (["All done."], FakeMessage([text_block("All done.")], "end_turn")),
+        )
+        self.set_budget()
+
+        run_stream(web_server.chat(web_server.ChatRequest(message="hi", session_id="s1"), FakeRequest()))
+
+        _, history = web_server.get_session("s1")
+        assistant_messages = [m for m in history if m["role"] == "assistant"]
+        self.assertEqual(len(assistant_messages), 2)
+        tool_use_content = assistant_messages[0]["content"][0]
+        self.assertEqual(set(tool_use_content), {"type", "id", "name", "input"})
+        text_content = assistant_messages[1]["content"][0]
+        self.assertEqual(set(text_content), {"type", "text"})
 
     def test_a_client_side_error_before_any_request_ends_the_stream_gracefully(self):
         """Regression test: a missing/misconfigured API key raises a plain TypeError from the SDK's

@@ -143,6 +143,20 @@ TOOLS = [RECOMMEND_TARIFF_TOOL, FIND_REGION_TOOL]
 market_cache = core.MarketCache()
 
 
+def serialize_assistant_block(block: Any) -> dict[str, Any]:
+    """Turns one response content block into the minimal dict the Messages API accepts back as
+    request input. `block.model_dump()` isn't safe to replay directly: response-only fields the
+    SDK adds (e.g. a TextBlock's `citations`, a ToolUseBlock's `caller`/`toolset_name`) aren't
+    valid on the request-side schema, and replaying them breaks every follow-up turn with an
+    API error the client only sees as a generic failure.
+    """
+    if block.type == "text":
+        return {"type": "text", "text": block.text}
+    if block.type == "tool_use":
+        return {"type": "tool_use", "id": block.id, "name": block.name, "input": block.input}
+    return {k: v for k, v in block.model_dump().items() if v is not None}  # future block types
+
+
 def call_tool(name: str, tool_input: dict[str, Any]) -> tuple[Any, bool]:
     """Runs a tool call against core.py. Returns (content, is_error)."""
     try:
@@ -343,7 +357,7 @@ def chat(req: ChatRequest, request: Request):
                     final = stream_ctx.get_final_message()
 
                 token_budget.record(ip, final.usage.input_tokens + final.usage.output_tokens)
-                history.append({"role": "assistant", "content": [block.model_dump() for block in final.content]})
+                history.append({"role": "assistant", "content": [serialize_assistant_block(block) for block in final.content]})
 
                 if final.stop_reason != "tool_use":
                     break
