@@ -70,43 +70,37 @@
         <h2>Claude Code capabilities used</h2>
         <ul>
           <li>
-            <strong>Architecture options before code.</strong> Presented several ways to expose the
-            engine as a public chat agent (direct API integration vs. a remote MCP connector vs. a
-            subprocess bridge) with real trade-offs, then used Plan Mode to scope the chosen
-            approach in detail before touching a single file.
+            <strong>I set the architecture direction before any code was written.</strong> I asked
+            for real build options &mdash; direct API integration vs. a remote MCP connector vs. a
+            subprocess bridge &mdash; weighed the trade-offs myself, and picked the approach. Claude
+            Code then used Plan Mode to scope that specific approach in detail before touching a file.
           </li>
           <li>
-            <strong>Multi-file refactoring without breaking a tested codebase.</strong> Extracted
-            shared behaviour (the refine-offer instructions, the rate-limit cache) out of the MCP
-            server and into the shared core so two independent AI-facing interfaces couldn't drift
-            apart &mdash; verified against the existing test suite the whole way.
+            <strong>I pushed the guardrails further than the first draft.</strong> The first plan
+            only capped spend per visitor, with no ceiling on total spend across everyone combined.
+            I asked for that to be tightened and set the actual number myself &mdash; a hard
+            10,000-token daily cap across every visitor &mdash; rather than accepting the looser
+            per-visitor-only version.
           </li>
           <li>
-            <strong>Untangling concurrent work.</strong> Mid-session, discovered another Claude Code
-            session was independently editing the same files for an unrelated feature. Reconstructed
-            the exact edits by hand to split one tangled working tree into two clean, correctly
-            attributed commits, rather than merging two unrelated features into one.
+            <strong>I made every account, credential and hosting call myself.</strong> I created the
+            Render and Anthropic accounts, generated and scoped the API key, set the spend limits,
+            and chose the hosting tier. Claude Code was explicit about which of those steps were mine
+            to do, and built the deployable code and config around the decisions I made.
           </li>
           <li>
-            <strong>Live, browser-driven debugging against the real deployment.</strong> Drove the
-            actual deployed widget in an embedded browser, read its network requests and console
-            output, and isolated two real bugs through direct reproduction: a stale CDN cache
-            serving an old build, and an Anthropic SDK detail where response objects carry fields
-            that break the API if replayed verbatim into the next request &mdash; something that
-            only ever showed up on real follow-up questions.
+            <strong>I found the bugs by using my own product, then directed how they got diagnosed.</strong>
+            I tested the live chat myself, caught two real problems &mdash; a follow-up question
+            failing, the "answer first, then refine" flow never appearing &mdash; and specifically
+            asked for a root-cause diagnosis rather than a guess. That's what led to fixing an actual
+            Anthropic SDK gotcha and a token-truncation bug, both now locked in with regression tests.
           </li>
           <li>
-            <strong>Closing a security gap it found, not just one it was told about.</strong> Traced
-            a genuine exploit &mdash; a free hosting tier's ephemeral filesystem let anyone bypass
-            the daily spend cap by waiting for the service to idle out and restart &mdash; explained
-            the actual blast radius, and shipped a proportionate fix (a keep-alive ping) rather than
-            reaching for a database migration a portfolio demo doesn't need.
-          </li>
-          <li>
-            <strong>Respecting hard boundaries.</strong> Never handled an API key directly, never
-            created a third-party account on my behalf, and was explicit about which actions needed
-            my sign-off (Render setup, Anthropic billing and spend limits) versus which it could
-            just do.
+            <strong>I called the trade-offs, every time one came up.</strong> Free Render tier and
+            its caveats vs. a paid plan, a lightweight keep-alive ping vs. a database migration, a
+            plain reminder vs. full API automation for a scheduled change, one combined commit vs.
+            splitting a tangled working tree in two &mdash; each was a decision I made after being
+            given the actual options, not a default Claude Code picked on its own.
           </li>
         </ul>
       </section>
