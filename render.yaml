@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: octopus-tariff-advisor
+    runtime: python
+    plan: free
+    rootDir: tariff-advisor
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: uvicorn web_server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
