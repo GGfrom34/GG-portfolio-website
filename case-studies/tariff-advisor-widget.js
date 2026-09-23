@@ -3,6 +3,11 @@
  * (tariff-advisor/web_server.py). No build step, no dependencies, matching the rest of this site.
  *
  * Point BACKEND_URL at the deployed backend before publishing.
+ *
+ * There is no build step to fingerprint this file, and GitHub Pages serves it with a browser
+ * cache lifetime long enough that a visitor's browser (or this project's own dev tooling) can
+ * keep running a stale copy after a change. Bump the `?v=` query string on the <script> tag in
+ * octopus-tariff-advisor.html every time this file changes, so browsers treat it as a new URL.
  */
 (function () {
   "use strict";
