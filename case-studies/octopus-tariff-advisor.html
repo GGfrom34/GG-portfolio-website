@@ -25,27 +25,117 @@
 
       <section id="problem">
         <h2>Problem</h2>
-        <p><em>Placeholder &mdash; describe the problem this project addresses.</em></p>
+        <p>
+          Octopus Energy sells seven-odd household electricity tariffs (Flexible, Agile, Go, Cosy,
+          Intelligent Octopus Go, Outgoing, Agile Outgoing), and which one is actually cheapest
+          depends on a combination of things a generic comparison table can't capture: whether you
+          have solar panels, whether your EV charges overnight or whenever you happen to plug in,
+          whether a home battery can arbitrage price swings. Getting this right means reasoning
+          about the mechanics &mdash; not just looking up a flat rate.
+        </p>
+        <p>
+          I wanted a tool that answers immediately from whatever a visitor happens to say first,
+          states plainly which assumptions the answer rests on, and only then asks for the specific
+          details that would sharpen it &mdash; rather than a form to fill in before it will say
+          anything at all. And I wanted that agent reachable by anyone visiting this site, not
+          locked inside my own Claude Code session.
+        </p>
       </section>
 
       <section id="approach">
         <h2>Approach</h2>
-        <p><em>Placeholder &mdash; describe how the problem was approached.</em></p>
+        <p>
+          The project is built in layers, each added as its own piece of work. A dependency-free
+          Python engine (<code>core.py</code>) simulates a representative day of energy flows
+          against each tariff's actual half-hourly prices &mdash; not a single fixed usage profile
+          re-priced per tariff, but a fresh simulation per candidate, since a battery or a smart EV
+          charger behaves differently on a flat rate than it does on Agile. That engine has no
+          knowledge of any interface: a CLI and an MCP server (for Claude Desktop/Code) were built
+          as thin adapters on top of it, sharing a single "answer first, then offer to refine"
+          behavioural contract so the assumptions a result rests on are always structured data, not
+          something an LLM has to remember to mention.
+        </p>
+        <p>
+          The most recent layer &mdash; and the one embedded live below &mdash; is a public web
+          chat backend with its own persona, reusing that same engine and behavioural contract
+          rather than duplicating any tariff logic. Since it's a public, unauthenticated endpoint
+          spending real API credits, most of the work went into guardrails: a persisted daily token
+          budget (global and per visitor), rate limiting, and tight per-call caps, deployed to
+          Render and load-tested against real conversations rather than just written and assumed
+          correct.
+        </p>
       </section>
 
       <section id="capabilities">
         <h2>Claude Code capabilities used</h2>
-        <p><em>Placeholder &mdash; list the Claude Code / agent capabilities used.</em></p>
+        <ul>
+          <li>
+            <strong>Architecture options before code.</strong> Presented several ways to expose the
+            engine as a public chat agent (direct API integration vs. a remote MCP connector vs. a
+            subprocess bridge) with real trade-offs, then used Plan Mode to scope the chosen
+            approach in detail before touching a single file.
+          </li>
+          <li>
+            <strong>Multi-file refactoring without breaking a tested codebase.</strong> Extracted
+            shared behaviour (the refine-offer instructions, the rate-limit cache) out of the MCP
+            server and into the shared core so two independent AI-facing interfaces couldn't drift
+            apart &mdash; verified against the existing test suite the whole way.
+          </li>
+          <li>
+            <strong>Untangling concurrent work.</strong> Mid-session, discovered another Claude Code
+            session was independently editing the same files for an unrelated feature. Reconstructed
+            the exact edits by hand to split one tangled working tree into two clean, correctly
+            attributed commits, rather than merging two unrelated features into one.
+          </li>
+          <li>
+            <strong>Live, browser-driven debugging against the real deployment.</strong> Drove the
+            actual deployed widget in an embedded browser, read its network requests and console
+            output, and isolated two real bugs through direct reproduction: a stale CDN cache
+            serving an old build, and an Anthropic SDK detail where response objects carry fields
+            that break the API if replayed verbatim into the next request &mdash; something that
+            only ever showed up on real follow-up questions.
+          </li>
+          <li>
+            <strong>Closing a security gap it found, not just one it was told about.</strong> Traced
+            a genuine exploit &mdash; a free hosting tier's ephemeral filesystem let anyone bypass
+            the daily spend cap by waiting for the service to idle out and restart &mdash; explained
+            the actual blast radius, and shipped a proportionate fix (a keep-alive ping) rather than
+            reaching for a database migration a portfolio demo doesn't need.
+          </li>
+          <li>
+            <strong>Respecting hard boundaries.</strong> Never handled an API key directly, never
+            created a third-party account on my behalf, and was explicit about which actions needed
+            my sign-off (Render setup, Anthropic billing and spend limits) versus which it could
+            just do.
+          </li>
+        </ul>
       </section>
 
       <section id="outcome">
         <h2>Outcome</h2>
-        <p><em>Placeholder &mdash; describe the outcome and results.</em></p>
+        <ul>
+          <li>
+            A working, publicly hosted chat agent, embedded live on this page below &mdash; the same
+            recommendation engine now sits behind three independent interfaces (CLI, MCP, web chat)
+            without a single line of tariff logic duplicated between them.
+          </li>
+          <li>
+            Guardrails that were actually tested against their own edge cases, not just written and
+            assumed correct: a persisted per-visitor and global daily token budget, a rate limit, and
+            a keep-alive workflow that closes a real bypass discovered during testing.
+          </li>
+          <li>
+            Two genuine bugs found and fixed through live testing rather than in a vacuum &mdash; a
+            token-truncation issue that silently broke the "answer first, then refine" flow, and a
+            follow-up-message failure traced to a specific SDK serialisation detail &mdash; both
+            locked in with regression tests, not just patched and forgotten.
+          </li>
+        </ul>
       </section>
 
       <section id="repo">
         <h2>Repository</h2>
-        <p><!-- TODO: replace with the actual repo link --><a href="#">View the GitHub repo</a></p>
+        <p><a href="https://github.com/GGfrom34/GG-portfolio-website/tree/main/tariff-advisor" target="_blank" rel="noopener noreferrer">View the GitHub repo</a></p>
       </section>
 
       <section id="ask-the-advisor" class="advisor-widget">

@@ -137,6 +137,27 @@ h1, h2, h3 {
   padding-bottom: 0.35rem;
 }
 
+.case-study ul {
+  margin: 1rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.case-study li {
+  margin-bottom: 0.75rem;
+}
+
+.case-study li:last-child {
+  margin-bottom: 0;
+}
+
+.case-study code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  background: var(--color-border);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
 .back-link {
   display: inline-block;
   margin-bottom: 1.5rem;
