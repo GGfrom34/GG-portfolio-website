@@ -45,24 +45,27 @@
       <section id="approach">
         <h2>Approach</h2>
         <p>
-          The project is built in layers, each added as its own piece of work. A dependency-free
-          Python engine (<code>core.py</code>) simulates a representative day of energy flows
-          against each tariff's actual half-hourly prices &mdash; not a single fixed usage profile
-          re-priced per tariff, but a fresh simulation per candidate, since a battery or a smart EV
-          charger behaves differently on a flat rate than it does on Agile. That engine has no
-          knowledge of any interface: a CLI and an MCP server (for Claude Desktop/Code) were built
-          as thin adapters on top of it, sharing a single "answer first, then offer to refine"
-          behavioural contract so the assumptions a result rests on are always structured data, not
-          something an LLM has to remember to mention.
+          I built this in layers on purpose, and kept it that way as I added to it. A
+          dependency-free Python engine (<code>core.py</code>) does all the reasoning &mdash;
+          simulating a representative day of energy flows against each tariff's actual half-hourly
+          prices, with a fresh simulation per candidate rather than one fixed usage profile re-priced
+          across each product, since a battery or a smart EV charger behaves differently on a flat
+          rate than it does on Agile &mdash; and I insisted that engine stay completely ignorant of
+          any interface. That's the constraint that let me add a CLI, then an MCP server for Claude
+          Desktop/Code, then the public web chat below, each as a thin adapter with no tariff logic
+          of its own, all three sharing one "answer first, then offer to refine" behavioural contract
+          instead of each reinventing it.
         </p>
         <p>
-          The most recent layer &mdash; and the one embedded live below &mdash; is a public web
-          chat backend with its own persona, reusing that same engine and behavioural contract
-          rather than duplicating any tariff logic. Since it's a public, unauthenticated endpoint
-          spending real API credits, most of the work went into guardrails: a persisted daily token
-          budget (global and per visitor), rate limiting, and tight per-call caps, deployed to
-          Render and load-tested against real conversations rather than just written and assumed
-          correct.
+          For the web chat specifically, I treated "public and unauthenticated" as the actual design
+          constraint, not an afterthought. I asked for real architecture options before any of it was
+          built and picked the approach myself, then kept pushing on the guardrails &mdash; a
+          persisted daily token budget, rate limiting, tight per-call caps &mdash; until I was
+          confident they'd hold under real use rather than just look reasonable on paper. Once it was
+          deployed, I tested it against real conversations myself instead of trusting that written
+          guardrails would behave as intended, which is what surfaced both a real security gap in the
+          hosting setup and two genuine product bugs &mdash; all fixed and locked in with regression
+          tests before I called it done.
         </p>
       </section>
 
