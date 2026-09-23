@@ -7,7 +7,7 @@
 (function () {
   "use strict";
 
-  const BACKEND_URL = "http://localhost:8000"; // TODO: replace with the deployed backend's URL
+  const BACKEND_URL = "https://octopus-tariff-advisor.onrender.com";
   const SESSION_STORAGE_KEY = "tariff-advisor-session-id";
 
   const chatEl = document.getElementById("advisor-chat");
