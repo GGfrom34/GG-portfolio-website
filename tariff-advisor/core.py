@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import math
 import re
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -388,6 +389,30 @@ def lookup_region(postcode: str) -> dict[str, Any]:
         "region_name": single["region_name"] if single else None,
         "candidates": candidates,
     }
+
+
+class MarketCache:
+    """Caches fetch_market per region for a short time.
+
+    One recommendation costs about a dozen HTTP requests, and a single conversation (over any
+    interface) tends to call it repeatedly for the same region. Access is guarded by a lock,
+    which also stops concurrent callers fetching the same region twice. Failures are not cached.
+    """
+
+    def __init__(self, fetch: Callable[[str], Market] = fetch_market,
+                 ttl_s: float = 600.0, clock: Callable[[], float] = time.monotonic):
+        self._fetch, self._ttl_s, self._clock = fetch, ttl_s, clock
+        self._entries: dict[str, tuple[float, Market]] = {}
+        self._lock = threading.Lock()
+
+    def __call__(self, region: str) -> Market:
+        with self._lock:
+            hit = self._entries.get(region)
+            if hit and self._clock() - hit[0] < self._ttl_s:
+                return hit[1]
+            market = self._fetch(region)
+            self._entries[region] = (self._clock(), market)
+            return market
 
 
 # ---------------------------------------------------------------------------
@@ -886,6 +911,33 @@ def validate_profile(data: dict[str, Any], *, allow_assumptions: bool = False) -
 
     profile.assumed.sort(key=lambda a: _ASSUMED_INPUT_ORDER.index(a["input"]))
     return profile
+
+
+# Shared behavioral contract for any interface that lets a model call recommend_tariff on a
+# user's behalf (the MCP server, the web chat backend). Not used by the CLI, which is not
+# model-driven. Each such interface wraps this with its own persona/framing but must not change
+# the underlying behavior, so it lives here once rather than being copied per adapter.
+AGENT_INSTRUCTIONS = (
+    "Explores Octopus Energy tariffs for a UK household using live public rates. This is an "
+    "informational aid, not financial advice or regulated switching advice, and it is not "
+    "affiliated with Octopus Energy. All costs are estimates built on stated assumptions.\n\n"
+    "How to behave:\n"
+    "1. Answer first. After the user's first message, always call recommend_tariff straight away, "
+    "even when inputs are missing. Pass only what the user actually said and leave everything else "
+    "out: never invent values, and do not ask questions before answering. If they give a postcode, "
+    "call find_region first and pass its region.\n"
+    "2. Present the recommendation and say plainly which assumptions it rests on "
+    "(see based_on_assumptions and assumed_inputs in the result).\n"
+    "3. End that answer by offering a more accurate estimate: one short sentence inviting the user to "
+    "replace the assumptions, followed by a bullet list of the `question` of EVERY entry in "
+    "assumed_inputs, each once and in the order given. Do not add questions that are not in the list "
+    "and do not leave any out.\n"
+    "4. When the user replies with more detail, call recommend_tariff again with everything known so "
+    "far, and again end by listing only the questions still in assumed_inputs. If assumed_inputs is "
+    "empty, do not make the offer.\n"
+    "5. Always say the figures are estimates, include the key reasons and caveats, and suggest "
+    "checking octopus.energy before any switch."
+)
 
 
 def recommend_tariff(profile: dict[str, Any], *, market: Optional[Market] = None,

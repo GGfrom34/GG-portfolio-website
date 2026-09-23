@@ -13,13 +13,15 @@ The code is split into core logic and an interface, so the same logic can sit be
 | `core.py` | All the logic. Calls the Octopus API, models the household, ranks tariffs. It has no knowledge of the command line or of any other interface: it does no printing, prompting or exiting. The single entry point is `recommend_tariff(profile: dict) -> dict`, which returns plain, JSON-serialisable data. |
 | `cli.py` | A thin command-line wrapper. It parses arguments into a profile dict, calls `core.recommend_tariff()`, and prints the result readably. It is the only file that knows about the command line. |
 | `mcp_server.py` | A thin [MCP](https://modelcontextprotocol.io) server: a second interface over the same `recommend_tariff()`. It maps typed tool arguments to a profile dict, calls the core, and turns core errors into MCP tool errors. It contains no tariff logic. |
+| `web_server.py` | A third interface: a small FastAPI backend that drives the Anthropic Messages API's tool-use loop directly against `core.py`, so a visitor to the public portfolio site can chat with the advisor without any MCP client. See [Web chat](#web-chat-public-site). |
 
-Inside `core.py` the API-calling code is kept apart from the recommendation logic. The API layer fetches rates and returns normalised `Tariff` / `Market` objects. The recommendation engine works on those objects with no network access, so it can be tested offline by passing a hand-built `Market` to `recommend_tariff(profile, market=...)`. Both interfaces reuse the core unchanged, because it returns structured data rather than formatted text.
+Inside `core.py` the API-calling code is kept apart from the recommendation logic. The API layer fetches rates and returns normalised `Tariff` / `Market` objects. The recommendation engine works on those objects with no network access, so it can be tested offline by passing a hand-built `Market` to `recommend_tariff(profile, market=...)`. All three interfaces reuse the core unchanged, because it returns structured data rather than formatted text. Two things every model-driven interface needs are defined once in `core.py` rather than copied per adapter: `AGENT_INSTRUCTIONS` (the "answer first, then offer to refine" behavioral contract, wrapped in each adapter's own persona/framing) and `MarketCache` (a short TTL cache over `fetch_market`, since one recommendation costs about a dozen HTTP requests and a conversation tends to ask several times).
 
 ## Requirements
 
 - **Core and CLI:** Python 3.9 or later, standard library only. No API key is needed, because only Octopus's public product and rate endpoints are used.
 - **MCP server:** Python 3.10 or later and the `mcp` package (v2), installed from `requirements-mcp.txt` (see [MCP server](#mcp-server)). The core and CLI never import it.
+- **Web chat backend:** Python 3.10 or later, `fastapi`/`uvicorn`/`anthropic`, installed from `requirements-web.txt` (see [Web chat](#web-chat-public-site)), and an `ANTHROPIC_API_KEY`. The core, CLI and MCP server never import it.
 
 ## Usage
 
@@ -151,20 +153,63 @@ Claude Desktop (`claude_desktop_config.json`):
 
 On Windows use `.venv\\Scripts\\python.exe` (backslashes doubled in JSON). Then ask something like: *"I'm at SW1A 1AA with solar panels and an EV that charges overnight, using about 4,000 kWh a year. Which Octopus tariffs should I look at?"*
 
+## Web chat (public site)
+
+`web_server.py` is a small FastAPI backend that lets a visitor to the portfolio site chat with the advisor directly, without an MCP client. It drives the Anthropic Messages API's tool-use loop itself against a `recommend_tariff` / `find_region` tool pair backed by `core.py`, and streams the reply to the browser as Server-Sent Events. The frontend is a plain-JS widget (`case-studies/tariff-advisor-widget.js`) embedded in the case-study page; there is no build step.
+
+It carries its own persona on top of the same `core.AGENT_INSTRUCTIONS` behavioral contract the MCP server uses (see [First answer, then refine](#first-answer-then-refine)), so the underlying behavior is identical across both interfaces even though the voice differs.
+
+**This is a public, unauthenticated endpoint, so it is deliberately mean with money.** Guardrails, all env-overridable:
+
+| Guardrail | Default | Purpose |
+|---|---|---|
+| `GLOBAL_DAILY_TOKEN_BUDGET` | 10,000 tokens/day | A hard ceiling across every visitor combined. Persisted to a small local JSON file so a restart or redeploy mid-day doesn't reopen the budget. |
+| `PER_IP_DAILY_TOKEN_BUDGET` | 2,000 tokens/day | Stops one visitor from consuming the whole global budget. Same persisted mechanism. |
+| `PER_IP_RATE_LIMIT_PER_MIN` | 5 messages/minute | A burst limiter, separate from the token budgets above. |
+| `MAX_INPUT_CHARS` | 1,000 characters | Per message. |
+| `MAX_TURNS_PER_SESSION` | 12 tool-loop turns | Caps how long one conversation can run. |
+| `MAX_TOKENS_PER_CALL` | 400 | The `max_tokens` cap passed to each Anthropic call. |
+
+Both token budgets are checked *before* every Anthropic call (using `max_tokens` as the reserved estimate) and reconciled against the actual `usage.input_tokens + usage.output_tokens` afterwards. Once either is exhausted, `/chat` returns a plain, non-technical message rather than an error, since running out is expected by design on a demo budget, not a fault. Sessions themselves are an in-memory, single-instance store (capped, oldest evicted first) — fine for a demo-scale service, but it means conversations and the rate limiter (though not the persisted token budgets) are lost on restart and are not shared across multiple instances.
+
+### Install and run
+
+```bash
+python -m venv .venv   # or reuse the one from requirements-mcp.txt
+# Windows:      .venv\Scripts\python.exe -m pip install -r requirements-web.txt
+# macOS/Linux:  .venv/bin/python -m pip install -r requirements-web.txt
+```
+
+```bash
+export ANTHROPIC_API_KEY=sk-...          # Windows: set ANTHROPIC_API_KEY=sk-...
+export ALLOWED_ORIGIN=http://localhost:3000   # the origin the widget is served from
+uvicorn web_server:app --reload
+```
+
+### Deploying
+
+Any host that runs a persistent Python process works (so the in-memory session store, market cache, and rate limiter behave as intended between requests) — Render, Fly.io and Railway are all straightforward fits for a small FastAPI app. A `Procfile` is included:
+
+```
+web: uvicorn web_server:app --host 0.0.0.0 --port $PORT
+```
+
+Set `ANTHROPIC_API_KEY` and `ALLOWED_ORIGIN` (the portfolio site's real origin) on the host, then point `BACKEND_URL` at the top of `case-studies/tariff-advisor-widget.js` at the deployed URL. The persisted token-budget file (`.budget_state.json` by default, overridable via `BUDGET_STATE_PATH`) needs to live on a writable, persistent disk — on a host with an ephemeral filesystem, set `BUDGET_STATE_PATH` to a mounted volume, otherwise the budget silently resets on every restart.
+
 ## Tests
 
-Three offline suites (standard-library `unittest`, no network):
+Four offline suites (standard-library `unittest`, no network, no real Anthropic calls):
 
 | File | What it tests |
 |------|---------------|
 | `test_core.py` | The recommendation engine against a hand-built `Market`: archetype classification, ranking, Agile demotion, battery shifting, export handling, profile validation, UK time/BST handling, rate parsing, and a check that `core.py` stays free of CLI code. |
 | `test_api.py` | The API layer against **saved real API responses**, with `core._get_json` replaced by a playback stub: product discovery and filtering, per-region tariff lookup, the `varying` payment-method key on Flexible Octopus, rate windows, pagination, retry and error handling, and end-to-end recommendations on recorded rates. |
-
 | `test_mcp_server.py` | The MCP adapter through an in-memory MCP client, with the recorded API responses behind it: the tool list and schemas (no required inputs), results matching the core exactly, the answer-first flow (a vague prompt still gets an answer and the assumed-inputs list shrinks as inputs arrive), error mapping, the rate cache (including concurrent callers), `find_region`, a real stdio subprocess handshake that also checks the instructions reach the client, and checks that the core never imports MCP and the adapter never prints or holds tariff logic. Skipped automatically when `mcp` is not installed. |
+| `test_web_server.py` | The web chat adapter with a **fake Anthropic client** (canned tool_use/text content, so no tokens are spent) and the recorded API responses behind `core.py`: the tool loop and profile mapping, error-result mapping, that any exception (not just `anthropic.APIError`) ends the stream gracefully instead of crashing it, the rate limiter, the persisted daily token budget (global and per-IP, including surviving a simulated restart and resetting on a new UTC day), CORS, and a check that the core never imports FastAPI/Anthropic. Skipped automatically when `fastapi`/`anthropic` are not installed. |
 
 ```bash
-python -m unittest -v test_core test_api            # standard library only
-.venv/bin/python -m unittest -v test_core test_api test_mcp_server   # everything, with mcp installed
+python -m unittest -v test_core test_api                                   # standard library only
+.venv/bin/python -m unittest -v test_core test_api test_mcp_server test_web_server   # everything installed
 ```
 
 When you change the recommendation logic, add or adjust a test first. The engine tests assert on relationships (which tariff wins, what gets flagged), not on live prices, so they do not break when Octopus changes its rates.

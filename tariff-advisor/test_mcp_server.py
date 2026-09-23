@@ -64,7 +64,7 @@ class McpTestCase(unittest.IsolatedAsyncioTestCase):
         self.stub = Playback.load()
         for patcher in (
             mock.patch.object(core, "_get_json", self.stub),
-            mock.patch.object(mcp_server, "market_cache", mcp_server.MarketCache(fetch=fixed_time_fetch)),
+            mock.patch.object(mcp_server, "market_cache", core.MarketCache(fetch=fixed_time_fetch)),
         ):
             patcher.start()
             self.addCleanup(patcher.stop)
@@ -197,7 +197,7 @@ class RecommendTariffTests(McpTestCase):
                 raise core.OctopusApiError("connection refused")
             return fixed_time_fetch(region)
 
-        with mock.patch.object(mcp_server, "market_cache", mcp_server.MarketCache(fetch=flaky)):
+        with mock.patch.object(mcp_server, "market_cache", core.MarketCache(fetch=flaky)):
             failed = await self.call("recommend_tariff", PROFILE)
             self.assertTrue(failed.is_error)
             self.assertIn("temporarily unavailable", text_of(failed))
@@ -219,7 +219,7 @@ class RecommendTariffTests(McpTestCase):
             seen.append(threading.current_thread() is threading.main_thread())
             return fixed_time_fetch(region)
 
-        with mock.patch.object(mcp_server, "market_cache", mcp_server.MarketCache(fetch=spy)):
+        with mock.patch.object(mcp_server, "market_cache", core.MarketCache(fetch=spy)):
             await self.call("recommend_tariff", PROFILE)
         self.assertEqual(seen, [False])
 
@@ -339,7 +339,7 @@ class MarketCacheTests(unittest.TestCase):
             self.fetched.append(region)
             return core.Market(region, "t", [], [])
 
-        self.cache = mcp_server.MarketCache(fetch=fetch, ttl_s=600, clock=self.clock)
+        self.cache = core.MarketCache(fetch=fetch, ttl_s=600, clock=self.clock)
 
     def test_second_call_within_ttl_is_served_from_cache(self):
         first = self.cache("C")
@@ -370,7 +370,7 @@ class MarketCacheTests(unittest.TestCase):
                 raise core.OctopusApiError("down")
             return core.Market(region, "t", [], [])
 
-        cache = mcp_server.MarketCache(fetch=flaky, clock=self.clock)
+        cache = core.MarketCache(fetch=flaky, clock=self.clock)
         with self.assertRaises(core.OctopusApiError):
             cache("C")
         cache("C")
@@ -384,7 +384,7 @@ class MarketCacheTests(unittest.TestCase):
             time.sleep(0.05)
             return core.Market(region, "t", [], [])
 
-        cache = mcp_server.MarketCache(fetch=slow, clock=self.clock)
+        cache = core.MarketCache(fetch=slow, clock=self.clock)
         barrier = threading.Barrier(8)
         results = []
 

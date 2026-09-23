@@ -6,6 +6,12 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8642"],
       "port": 8642
+    },
+    {
+      "name": "tariff-advisor-web",
+      "runtimeExecutable": "tariff-advisor/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "--app-dir", "tariff-advisor", "web_server:app", "--port", "8000", "--env-file", "tariff-advisor/.env"],
+      "port": 8000
     }
   ]
 }

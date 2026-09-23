@@ -1,0 +1,6 @@
+# Only needed for web_server.py (the public web chat backend). core.py, cli.py and
+# mcp_server.py do not need any of these.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+anthropic>=0.40,<1
+httpx>=0.27,<1  # only used by fastapi.testclient.TestClient in test_web_server.py

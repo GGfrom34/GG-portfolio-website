@@ -47,6 +47,24 @@
         <h2>Repository</h2>
         <p><!-- TODO: replace with the actual repo link --><a href="#">View the GitHub repo</a></p>
       </section>
+
+      <section id="ask-the-advisor" class="advisor-widget">
+        <h2>Ask the Tariff Advisor</h2>
+        <p class="advisor-disclaimer">
+          A live demo of the agent described above. Informational only &mdash; not financial or
+          regulated switching advice, and not affiliated with Octopus Energy. Your messages are
+          sent to a small backend service to generate a reply and are not stored beyond this
+          conversation.
+        </p>
+        <div class="advisor-chat" id="advisor-chat" aria-live="polite"></div>
+        <form id="advisor-form" class="advisor-form">
+          <label for="advisor-input" class="sr-only">Your message</label>
+          <input id="advisor-input" type="text" autocomplete="off" maxlength="1000" required
+                 placeholder="e.g. I have solar panels and an EV, London, about 4500 kWh a year">
+          <button type="submit">Send</button>
+        </form>
+        <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
+      </section>
     </article>
   </main>
 
@@ -58,5 +76,7 @@
       </div>
     </div>
   </footer>
+
+  <script src="tariff-advisor-widget.js" defer></script>
 </body>
 </html>
