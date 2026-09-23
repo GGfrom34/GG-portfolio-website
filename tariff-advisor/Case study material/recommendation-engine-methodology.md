@@ -233,6 +233,22 @@ alone would otherwise systematically favour Agile for households who
 couldn't realistically avoid its worst half-hours — that would be a
 misleading recommendation, not just an imprecise one.
 
+A second, narrower adjustment guards a specific failure mode of the demand
+shape itself: for the `neither` archetype (no solar, EV or battery), a
+time-of-use tariff can come out marginally cheaper than Flexible purely
+because the illustrative demand curve happens to sit slightly favourably
+against that tariff's windows — not because this household does anything to
+earn it. If the winning margin is below 3% of Flexible's cost
+(`ASSUMPTIONS["neither_tou_materiality_share"]`), Flexible is promoted to
+the front as the steadier default, with a note naming the edged-out tariff
+and the size of the margin, which stays visible as the very next
+alternative. A materially larger saving is left alone and recommended
+normally — the rule targets noise-level margins specifically, not
+time-of-use tariffs in general. This stacks with the Agile rule above: if
+Agile is demoted and the tariff that becomes the new leader is itself only
+marginally ahead of Flexible, it gets checked against the same threshold in
+turn.
+
 Export tariffs are ranked separately, by estimated income against the
 *dispatch already computed for the top-ranked import tariff* (there's only
 one export profile to value, since export is physical solar surplus, not
@@ -257,7 +273,11 @@ describing.
   orientation, tilt or shading.
 - **Demand curve is a national illustrative shape**, not this household's
   actual usage pattern, and only has hourly resolution mapped onto
-  half-hourly prices.
+  half-hourly prices. For the `neither` archetype specifically, a
+  materiality threshold (see "Ranking and explanation") stops a noise-level
+  margin from this curve alone from naming a specific product as best fit —
+  but the underlying curve is still a stylised guess for every archetype
+  where a real saving legitimately depends on it.
 - **Battery capacity is a single daily pool** shared between solar
   self-consumption and grid arbitrage, not something that can cycle twice.
 - **Agile Outgoing export is valued at flat dispatch timing** — the model
@@ -280,6 +300,7 @@ hidden inside the algorithm. The ones referenced in this document:
 |---|---|---|
 | `days_per_year` | 365 | Annualising the one-day simulation |
 | `demand_shape` | illustrative, not measured | Honesty label on the demand curve |
+| `neither_tou_materiality_share` | 0.03 | Minimum saving (as a share of Flexible's cost) before a time-of-use tariff outranks Flexible for a `neither` household |
 | `solar_kwh_per_kwp_per_year` | 850 | Annual solar yield per kWp |
 | `solar_daylight_hours` | 06:00–20:00 | Width of the sine-curve window |
 | `ev_charger_kw` | 7.0 | Per-slot EV charging cap (3.5 kWh/slot) |

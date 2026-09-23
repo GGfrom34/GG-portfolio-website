@@ -51,18 +51,23 @@ class DiscoveryAndParsingTests(unittest.TestCase):
         self.market, self.stub = fetch("C")
         self.tariffs = by_family(self.market)
 
-    def test_finds_all_six_families(self):
-        self.assertEqual(set(self.tariffs), {"variable", "agile", "go", "cosy", "outgoing", "agile_outgoing"})
-        self.assertEqual({t.family for t in self.market.import_tariffs}, {"variable", "agile", "go", "cosy"})
+    def test_finds_all_seven_families(self):
+        self.assertEqual(set(self.tariffs), {"variable", "agile", "go", "cosy", "intelligent_go", "outgoing", "agile_outgoing"})
+        self.assertEqual({t.family for t in self.market.import_tariffs}, {"variable", "agile", "go", "cosy", "intelligent_go"})
         self.assertEqual({t.family for t in self.market.export_tariffs}, {"outgoing", "agile_outgoing"})
         self.assertEqual(self.market.unavailable, [])
 
     def test_picks_current_variable_products_not_fixed_or_other_variants(self):
-        self.assertEqual(self.tariffs["go"].product_code, "GO-VAR-22-10-14")  # not GO-FIX-12M-* or IOG-*
+        self.assertEqual(self.tariffs["go"].product_code, "GO-VAR-22-10-14")  # not GO-FIX-12M-*
         self.assertEqual(self.tariffs["cosy"].product_code, "COSY-22-12-08")  # not COSY-FIX-12M-*
         self.assertEqual(self.tariffs["outgoing"].product_code, "OUTGOING-VAR-24-10-26")  # not OUTGOING-PRIME-FIX-*
         self.assertEqual(self.tariffs["agile"].direction, "IMPORT")
         self.assertEqual(self.tariffs["agile_outgoing"].direction, "EXPORT")
+
+    def test_picks_the_standard_intelligent_go_product_not_the_ev_saver_variant(self):
+        product_code = self.tariffs["intelligent_go"].product_code
+        self.assertTrue(product_code.startswith("IOG-SMB-FIX-12M"), product_code)
+        self.assertNotIn("OEV", product_code)
 
     def test_tariff_codes_are_for_the_requested_region(self):
         for tariff in self.tariffs.values():
@@ -74,8 +79,9 @@ class DiscoveryAndParsingTests(unittest.TestCase):
 
     def test_standing_charges_come_from_the_product_detail(self):
         for family, tariff in self.tariffs.items():
-            detail = self.stub.responses[f"{API}/products/{tariff.product_code}/"]["single_register_electricity_tariffs"]["_C"]
-            entry = next(iter(detail.values()))
+            product_detail = self.stub.responses[f"{API}/products/{tariff.product_code}/"]
+            register_key = "four_rate_ev_electricity_tariffs" if family == "intelligent_go" else "single_register_electricity_tariffs"
+            entry = next(iter(product_detail[register_key]["_C"].values()))
             self.assertAlmostEqual(tariff.standing_charge_p_day, entry.get("standing_charge_inc_vat") or 0.0, msg=family)
 
     def test_flexible_is_found_under_the_varying_payment_key(self):
@@ -143,6 +149,12 @@ class RequestShapeTests(unittest.TestCase):
                 q = self.rate_query(product)
                 self.assertEqual(q["period_from"], "2026-09-21T14:00Z")
                 self.assertEqual(q["period_to"], "2026-09-22T14:00Z")
+
+    def test_intelligent_go_asks_for_the_current_day_and_night_rate_with_no_period_window(self):
+        day_key = next(k for k in self.stub.responses if "/day-unit-rates/" in k and "-C" in k)
+        night_key = next(k for k in self.stub.responses if "/night-unit-rates/" in k and "-C" in k)
+        self.assertEqual(query(day_key), {})
+        self.assertEqual(query(night_key), {})
 
     def test_unaligned_now_is_floored_to_the_half_hour(self):
         # 14:17 must floor to the recorded 14:00 windows; playback raises if any window differs.

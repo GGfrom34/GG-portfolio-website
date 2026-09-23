@@ -98,9 +98,9 @@
      "brand": "OCTOPUS_ENERGY"
     },
     {
-     "code": "COSY-FIX-12M-26-06-25",
+     "code": "COSY-FIX-12M-26-09-22",
      "direction": "IMPORT",
-     "full_name": "Cosy Octopus 12M Fixed June 2026 v1",
+     "full_name": "Cosy Octopus 12M Fixed September 2026 v1",
      "display_name": "Cosy Octopus 12M Fixed",
      "description": "Cosy Octopus is a heat pump tariff with eight hours of super cheap electricity every day to warm your home.",
      "is_variable": false,
@@ -110,11 +110,11 @@
      "is_business": false,
      "is_restricted": false,
      "term": 12,
-     "available_from": "2026-06-25T00:00:00+01:00",
-     "available_to": "2026-09-22T00:00:00+01:00",
+     "available_from": "2026-09-22T00:00:00+01:00",
+     "available_to": null,
      "links": [
       {
-       "href": "https://api.octopus.energy/v1/products/COSY-FIX-12M-26-06-25/",
+       "href": "https://api.octopus.energy/v1/products/COSY-FIX-12M-26-09-22/",
        "method": "GET",
        "rel": "self"
       }
@@ -782,8 +782,8 @@
         "rel": "standard_unit_rates"
        }
       ],
-      "standard_unit_rate_exc_vat": 19.98,
-      "standard_unit_rate_inc_vat": 20.979
+      "standard_unit_rate_exc_vat": 52.92,
+      "standard_unit_rate_inc_vat": 55.566
      }
     },
     "_N": {
@@ -810,11 +810,12 @@
         "rel": "standard_unit_rates"
        }
       ],
-      "standard_unit_rate_exc_vat": 21.54,
-      "standard_unit_rate_inc_vat": 22.617
+      "standard_unit_rate_exc_vat": 56.13,
+      "standard_unit_rate_inc_vat": 58.9365
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/AGILE-24-10-01/electricity-tariffs/E-1R-AGILE-24-10-01-C/standard-unit-rates/?page_size=1500&period_from=2026-09-14T14%3A00Z&period_to=2026-09-21T14%3A00Z": {
    "count": 336,
@@ -4897,8 +4898,8 @@
         "rel": "standard_unit_rates"
        }
       ],
-      "standard_unit_rate_exc_vat": 12.61,
-      "standard_unit_rate_inc_vat": 12.61
+      "standard_unit_rate_exc_vat": 28.25,
+      "standard_unit_rate_inc_vat": 28.25
      }
     },
     "_N": {
@@ -4925,11 +4926,12 @@
         "rel": "standard_unit_rates"
        }
       ],
-      "standard_unit_rate_exc_vat": 10.24,
-      "standard_unit_rate_inc_vat": 10.24
+      "standard_unit_rate_exc_vat": 26.22,
+      "standard_unit_rate_inc_vat": 26.22
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/AGILE-OUTGOING-19-05-13/electricity-tariffs/E-1R-AGILE-OUTGOING-19-05-13-C/standard-unit-rates/?page_size=1500&period_from=2026-09-14T14%3A00Z&period_to=2026-09-21T14%3A00Z": {
    "count": 336,
@@ -9044,7 +9046,8 @@
       "standard_unit_rate_inc_vat": 26.091975
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/COSY-22-12-08/electricity-tariffs/E-1R-COSY-22-12-08-C/standard-unit-rates/?page_size=1500&period_from=2026-09-21T14%3A00Z&period_to=2026-09-22T14%3A00Z": {
    "count": 8,
@@ -9223,7 +9226,8 @@
       "standard_unit_rate_inc_vat": 29.858745
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/GO-VAR-22-10-14/electricity-tariffs/E-1R-GO-VAR-22-10-14-C/standard-unit-rates/?page_size=1500&period_from=2026-09-21T14%3A00Z&period_to=2026-09-22T14%3A00Z": {
    "count": 3,
@@ -9271,6 +9275,174 @@
      "value_inc_vat": 29.858745,
      "valid_from": "2026-09-21T04:30:00Z",
      "valid_to": "2026-09-21T23:30:00Z",
+     "payment_method": null
+    }
+   ]
+  },
+  "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/": {
+   "code": "IOG-SMB-FIX-12M-26-09-18",
+   "full_name": "Intelligent Octopus Go 12M Fixed September 2026 v2",
+   "display_name": "Intelligent Octopus Go 12M Fixed",
+   "direction": null,
+   "is_variable": false,
+   "is_prepay": false,
+   "available_from": "2026-09-18T00:00:00+01:00",
+   "available_to": null,
+   "brand": "OCTOPUS_ENERGY",
+   "single_register_electricity_tariffs": {},
+   "four_rate_ev_electricity_tariffs": {
+    "_C": {
+     "direct_debit_monthly": {
+      "code": "E-1R-IOG-SMB-FIX-12M-26-09-18-C",
+      "standing_charge_exc_vat": 42.2934,
+      "standing_charge_inc_vat": 44.40807,
+      "online_discount_exc_vat": 0,
+      "online_discount_inc_vat": 0.0,
+      "dual_fuel_discount_exc_vat": 0,
+      "dual_fuel_discount_inc_vat": 0.0,
+      "exit_fees_exc_vat": 0,
+      "exit_fees_inc_vat": 0,
+      "exit_fees_type": "NONE",
+      "links": [
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/standing-charges/",
+        "method": "GET",
+        "rel": "standing_charges"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/day-unit-rates/",
+        "method": "GET",
+        "rel": "day_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/night-unit-rates/",
+        "method": "GET",
+        "rel": "night_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/ev-device-peak-unit-rates/",
+        "method": "GET",
+        "rel": "ev_device_peak_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/ev-device-off-peak-unit-rates/",
+        "method": "GET",
+        "rel": "ev_device_off_peak_unit_rates"
+       }
+      ],
+      "day_unit_rate_exc_vat": 35.481,
+      "day_unit_rate_inc_vat": 37.25505,
+      "night_unit_rate_exc_vat": 8.0,
+      "night_unit_rate_inc_vat": 8.4,
+      "ev_device_peak_unit_rate_exc_vat": 35.481,
+      "ev_device_peak_unit_rate_inc_vat": 37.25505,
+      "ev_device_off_peak_unit_rate_exc_vat": 8.0,
+      "ev_device_off_peak_unit_rate_inc_vat": 8.4
+     }
+    },
+    "_N": {
+     "direct_debit_monthly": {
+      "code": "E-1R-IOG-SMB-FIX-12M-26-09-18-N",
+      "standing_charge_exc_vat": 61.4414,
+      "standing_charge_inc_vat": 64.51347,
+      "online_discount_exc_vat": 0,
+      "online_discount_inc_vat": 0.0,
+      "dual_fuel_discount_exc_vat": 0,
+      "dual_fuel_discount_inc_vat": 0.0,
+      "exit_fees_exc_vat": 0,
+      "exit_fees_inc_vat": 0,
+      "exit_fees_type": "NONE",
+      "links": [
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/standing-charges/",
+        "method": "GET",
+        "rel": "standing_charges"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/day-unit-rates/",
+        "method": "GET",
+        "rel": "day_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/night-unit-rates/",
+        "method": "GET",
+        "rel": "night_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/ev-device-peak-unit-rates/",
+        "method": "GET",
+        "rel": "ev_device_peak_unit_rates"
+       },
+       {
+        "href": "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/ev-device-off-peak-unit-rates/",
+        "method": "GET",
+        "rel": "ev_device_off_peak_unit_rates"
+       }
+      ],
+      "day_unit_rate_exc_vat": 35.9661,
+      "day_unit_rate_inc_vat": 37.764405,
+      "night_unit_rate_exc_vat": 8.0,
+      "night_unit_rate_inc_vat": 8.4,
+      "ev_device_peak_unit_rate_exc_vat": 35.9661,
+      "ev_device_peak_unit_rate_inc_vat": 37.764405,
+      "ev_device_off_peak_unit_rate_exc_vat": 8.0,
+      "ev_device_off_peak_unit_rate_inc_vat": 8.4
+     }
+    }
+   }
+  },
+  "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/day-unit-rates/": {
+   "count": 1,
+   "next": null,
+   "previous": null,
+   "results": [
+    {
+     "value_exc_vat": 35.481,
+     "value_inc_vat": 37.25505,
+     "valid_from": "2026-09-17T23:00:00Z",
+     "valid_to": null,
+     "payment_method": null
+    }
+   ]
+  },
+  "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-C/night-unit-rates/": {
+   "count": 1,
+   "next": null,
+   "previous": null,
+   "results": [
+    {
+     "value_exc_vat": 8.0,
+     "value_inc_vat": 8.4,
+     "valid_from": "2026-09-17T23:00:00Z",
+     "valid_to": null,
+     "payment_method": null
+    }
+   ]
+  },
+  "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/day-unit-rates/": {
+   "count": 1,
+   "next": null,
+   "previous": null,
+   "results": [
+    {
+     "value_exc_vat": 35.9661,
+     "value_inc_vat": 37.764405,
+     "valid_from": "2026-09-17T23:00:00Z",
+     "valid_to": null,
+     "payment_method": null
+    }
+   ]
+  },
+  "https://api.octopus.energy/v1/products/IOG-SMB-FIX-12M-26-09-18/electricity-tariffs/E-1R-IOG-SMB-FIX-12M-26-09-18-N/night-unit-rates/": {
+   "count": 1,
+   "next": null,
+   "previous": null,
+   "results": [
+    {
+     "value_exc_vat": 8.0,
+     "value_inc_vat": 8.4,
+     "valid_from": "2026-09-17T23:00:00Z",
+     "valid_to": null,
      "payment_method": null
     }
    ]
@@ -9342,7 +9514,8 @@
       "standard_unit_rate_inc_vat": 12.0
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/OUTGOING-VAR-24-10-26/electricity-tariffs/E-1R-OUTGOING-VAR-24-10-26-C/standard-unit-rates/?page_size=1500&period_from=2026-09-21T14%3A00Z&period_to=2026-09-22T14%3A00Z": {
    "count": 1,
@@ -9437,7 +9610,8 @@
       "standard_unit_rate_inc_vat": 25.846695
      }
     }
-   }
+   },
+   "four_rate_ev_electricity_tariffs": {}
   },
   "https://api.octopus.energy/v1/products/VAR-22-11-01/electricity-tariffs/E-1R-VAR-22-11-01-C/standard-unit-rates/?page_size=1500&period_from=2026-09-21T14%3A00Z&period_to=2026-09-22T14%3A00Z": {
    "count": 2,

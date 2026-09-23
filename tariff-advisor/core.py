@@ -80,9 +80,15 @@ ASSUMPTIONS: dict[str, Any] = {
     "battery_arbitrage_uses_capacity_not_used_for_solar": True,
     "agile_rates_basis": "average of the last 7 days per half-hour slot",
     "time_of_use_rates_basis": "rates currently in force, mapped to UK local time",
+    "intelligent_go_offpeak_window": "23:30-05:30",  # Octopus's published window; not exposed by its day/night rate endpoints
+    "intelligent_go_rates_basis": "flat day rate and flat night rate currently in force, applied over Octopus's published off-peak window",
     "export_timing": "exports are not time-shifted, so Agile Outgoing is undervalued",
     "days_per_year": 365,
     "demand_shape": "typical UK domestic day (illustrative, not measured)",
+    # A time-of-use import tariff must beat Flexible by more than this share of Flexible's
+    # cost to be recommended over it when the household has no solar, EV or battery - see
+    # the `neither`-archetype check in build_recommendations.
+    "neither_tou_materiality_share": 0.03,
 }
 
 # Illustrative UK domestic demand by hour of day (relative weights).
@@ -98,6 +104,10 @@ FAMILIES: dict[str, dict[str, str]] = {
     "agile": {"direction": "IMPORT", "prefix": "AGILE-", "label": "Agile Octopus"},
     "go": {"direction": "IMPORT", "prefix": "GO-VAR", "label": "Octopus Go"},
     "cosy": {"direction": "IMPORT", "prefix": "COSY-2", "label": "Cosy Octopus"},
+    # Only ships as a 12M fixed product today (no evergreen variant); excludes the "-OEV-" EV Saver
+    # variant. Prices via four_rate_ev_electricity_tariffs (a flat day/night rate), not
+    # single_register_electricity_tariffs, so _build_tariff handles it separately.
+    "intelligent_go": {"direction": "IMPORT", "prefix": "IOG-SMB-FIX-12M", "label": "Intelligent Octopus Go"},
     "outgoing": {"direction": "EXPORT", "prefix": "OUTGOING-VAR", "label": "Outgoing Octopus"},
     "agile_outgoing": {"direction": "EXPORT", "prefix": "AGILE-OUTGOING", "label": "Agile Outgoing Octopus"},
 }
@@ -282,6 +292,32 @@ def _slot_rates_from_records(records: list[dict[str, Any]], start: datetime, end
     return [sum(p) / len(p) if p else overall for p in per_slot], raw
 
 
+def _hhmm_to_slot(text: str) -> int:
+    h, m = text.split(":")
+    return int(h) * 2 + int(m) // 30
+
+
+def _window_slots(window: str) -> list[int]:
+    """Slots in a 'HH:MM-HH:MM' window; a window that crosses midnight wraps."""
+    start, end = (_hhmm_to_slot(x) for x in window.split("-"))
+    if end <= start:
+        end += SLOTS
+    return [s % SLOTS for s in range(start, end)]
+
+
+def _current_flat_rate(records: list[dict[str, Any]], now: datetime) -> float:
+    """The direct-debit rate in force at `now`, from a day/night-unit-rates style record list
+    (a handful of validity-period records, not a half-hourly schedule)."""
+    for r in records:
+        if r.get("payment_method") not in (None, "DIRECT_DEBIT"):
+            continue
+        valid_from = _parse_utc(r["valid_from"])
+        valid_to = _parse_utc(r["valid_to"]) if r.get("valid_to") else None
+        if valid_from <= now and (valid_to is None or now < valid_to):
+            return float(r["value_inc_vat"])
+    raise OctopusApiError("No rate is currently in force for the requested tariff")
+
+
 def _discover_products(now: datetime) -> dict[str, dict[str, Any]]:
     """Pick the newest currently-available product for each family."""
     products = _paginate(f"{API_BASE}/products/", {"brand": "OCTOPUS_ENERGY", "is_business": "false", "page_size": 100})
@@ -300,11 +336,45 @@ def _discover_products(now: datetime) -> dict[str, dict[str, Any]]:
     return chosen
 
 
+def _build_intelligent_go_tariff(detail: dict[str, Any], code: str, region: str, now: datetime) -> Optional[Tariff]:
+    """Intelligent Octopus Go has no `single_register_electricity_tariffs` entry: it prices via a
+    separate flat day rate and flat night rate (`four_rate_ev_electricity_tariffs`), not a
+    half-hourly schedule. The night window itself isn't exposed by either endpoint, so it is taken
+    from Octopus's own published window (see ASSUMPTIONS["intelligent_go_offpeak_window"])."""
+    by_region = detail.get("four_rate_ev_electricity_tariffs", {}).get(f"_{region}")
+    if not by_region:
+        return None
+    entry = by_region.get("direct_debit_monthly") or next(iter(by_region.values()))
+    tariff_code = entry["code"]
+    day_url = f"{API_BASE}/products/{code}/electricity-tariffs/{tariff_code}/day-unit-rates/"
+    night_url = f"{API_BASE}/products/{code}/electricity-tariffs/{tariff_code}/night-unit-rates/"
+    day_rate = _current_flat_rate(_paginate(day_url), now)
+    night_rate = _current_flat_rate(_paginate(night_url), now)
+    slot_rates = [day_rate] * SLOTS
+    for s in _window_slots(ASSUMPTIONS["intelligent_go_offpeak_window"]):
+        slot_rates[s] = night_rate
+    return Tariff(
+        family="intelligent_go",
+        direction="IMPORT",
+        name=detail.get("full_name") or FAMILIES["intelligent_go"]["label"],
+        product_code=code,
+        tariff_code=tariff_code,
+        standing_charge_p_day=float(entry.get("standing_charge_inc_vat") or 0.0),
+        slot_rates_p_kwh=slot_rates,
+        rate_basis=ASSUMPTIONS["intelligent_go_rates_basis"],
+        source_urls=[f"{API_BASE}/products/{code}/", day_url, night_url],
+        observed_min_p_kwh=None,
+        observed_max_p_kwh=None,
+    )
+
+
 def _build_tariff(family: str, product: dict[str, Any], region: str, now: datetime) -> Optional[Tariff]:
     code = product["code"]
     detail = _get_json(f"{API_BASE}/products/{code}/")
     by_region = detail.get("single_register_electricity_tariffs", {}).get(f"_{region}")
     if not by_region:
+        if family == "intelligent_go":
+            return _build_intelligent_go_tariff(detail, code, region, now)
         return None
     entry = by_region.get("direct_debit_monthly") or next(iter(by_region.values()))
     tariff_code = entry["code"]
@@ -433,19 +503,6 @@ class Breakdown:
     import_cost_gbp: float
     standing_charge_gbp: float
     export_by_slot_kwh: list[float]
-
-
-def _hhmm_to_slot(text: str) -> int:
-    h, m = text.split(":")
-    return int(h) * 2 + int(m) // 30
-
-
-def _window_slots(window: str) -> list[int]:
-    """Slots in a 'HH:MM-HH:MM' window; a window that crosses midnight wraps."""
-    start, end = (_hhmm_to_slot(x) for x in window.split("-"))
-    if end <= start:
-        end += SLOTS
-    return [s % SLOTS for s in range(start, end)]
 
 
 def _demand_shape() -> list[float]:
@@ -689,10 +746,12 @@ def _import_reasons(profile: Profile, tariff: Tariff, bd: Breakdown, baseline: O
         diff = (base_bd.import_cost_gbp + base_bd.standing_charge_gbp) - (bd.import_cost_gbp + bd.standing_charge_gbp)
         word = "cheaper" if diff >= 0 else "dearer"
         reasons.append(f"Estimated £{abs(diff):,.0f}/yr {word} than {base_tariff.name} for this profile.")
-        if tariff.family in ("go", "cosy") and rs["max_p_kwh"] > max(base_tariff.slot_rates_p_kwh):
+        if tariff.family in ("go", "cosy", "intelligent_go") and rs["max_p_kwh"] > max(base_tariff.slot_rates_p_kwh):
             caveats.append(f"Peak rate ({rs['max_p_kwh']}p) is higher than {base_tariff.name}'s, so usage outside the cheap windows costs more.")
     if tariff.family == "agile":
         caveats.append("Agile prices change every half hour and can spike in the early evening; this estimate uses a 7-day average and suits households that can shift load.")
+    if tariff.family == "intelligent_go":
+        caveats.append("Intelligent Octopus Go is currently only available as a 12-month fixed-term contract (not a rolling variable tariff) and requires enrolling a compatible EV or charger in Octopus's smart charging to reliably get the off-peak rate.")
     return reasons, caveats
 
 
@@ -720,6 +779,21 @@ def build_recommendations(profile: Profile, market: Market) -> dict[str, Any]:
         agile = ranked.pop(0)
         ranked.insert(1, agile)
         notes.append("Agile has the lowest average-price estimate but is not ranked first: nothing in this profile (flexible EV charging or a battery that shifts to off-peak) lets you avoid its evening peaks.")
+
+    # A household with no solar, EV or battery has no way to *intentionally* use a
+    # time-of-use tariff's cheap windows - any saving it shows here comes entirely from
+    # where the illustrative (not measured) demand shape happens to sit relative to that
+    # tariff's windows, not from anything this household actually does differently. A
+    # thin margin from that curve isn't a reason to recommend switching product; only a
+    # large enough one is. Below the threshold, Flexible is promoted to the front as the
+    # steadier default and the edged-out tariff is kept as a nearby alternative.
+    if archetype == "neither" and baseline_tariff is not None and ranked[0].family != "variable":
+        edged_out = ranked[0]
+        saving = total(baseline_tariff) - total(edged_out)
+        if saving < total(baseline_tariff) * ASSUMPTIONS["neither_tou_materiality_share"]:
+            ranked.remove(baseline_tariff)
+            ranked.insert(0, baseline_tariff)
+            notes.append(f"{edged_out.name} is only about £{saving:,.0f}/yr cheaper than Flexible Octopus for this profile, based on an illustrative (not measured) demand shape rather than anything this household actually does differently - with no solar, EV or battery to intentionally use its cheap windows, Flexible is recommended as the steadier default. {edged_out.name} remains close behind and worth comparing.")
 
     export_ranked: list[tuple[Tariff, float]] = []
     export_vec = breakdowns[ranked[0].family].export_by_slot_kwh

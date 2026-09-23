@@ -78,8 +78,8 @@ def recommend_tariff(
     assumption in `assumed_inputs` with the `question` that would replace it: end your answer by
     offering a more accurate estimate and listing all of those questions.
 
-    Compares Flexible Octopus (standard variable), Agile, Go and Cosy for import, and Outgoing
-    and Agile Outgoing for solar export, using current public rates. Returns ranked
+    Compares Flexible Octopus (standard variable), Agile, Go, Cosy and Intelligent Octopus Go for
+    import, and Outgoing and Agile Outgoing for solar export, using current public rates. Returns ranked
     recommendations with the rate that applies, reasons, caveats, the assumptions used and the
     data source. Informational only; not financial or regulated switching advice. Costs are estimates.
     """

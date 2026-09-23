@@ -45,6 +45,7 @@ def make_market():
             tariff("go", "IMPORT", "Octopus Go", 44.1, slots(30.99, {(1, 11): 8.63})),
             tariff("cosy", "IMPORT", "Cosy Octopus", 42.4, slots(26.6, {(8, 14): 13.07, (26, 32): 13.07, (44, 48): 13.07, (32, 38): 39.95})),
             tariff("agile", "IMPORT", "Agile Octopus", 39.5, AGILE_RATES),
+            tariff("intelligent_go", "IMPORT", "Intelligent Octopus Go", 44.5, slots(31.0, {(1, 11): 7.2})),
         ],
         [
             tariff("outgoing", "EXPORT", "Outgoing Octopus", 0, [12.0] * 48),
@@ -103,10 +104,10 @@ class RecommendationTests(unittest.TestCase):
     def top(self, result, role="import"):
         return next(r for r in result["recommendations"] if r["role"] == role)
 
-    def test_overnight_ev_picks_go_and_prices_ev_at_offpeak(self):
+    def test_overnight_ev_picks_the_cheapest_offpeak_tariff_and_prices_ev_at_offpeak(self):
         result = run(ARCHETYPE_PROFILES["ev_overnight"])
-        self.assertEqual(self.top(result)["family"], "go")
-        self.assertTrue(any("averages 8.6p/kWh" in r for r in self.top(result)["reasons"]))
+        self.assertEqual(self.top(result)["family"], "intelligent_go")  # its off-peak rate undercuts Go's
+        self.assertTrue(any("averages 7.2p/kWh" in r for r in self.top(result)["reasons"]))
 
     def test_rank_is_by_estimated_cost(self):
         result = run(ARCHETYPE_PROFILES["ev_overnight"])
@@ -154,6 +155,62 @@ class RecommendationTests(unittest.TestCase):
         result = run(ARCHETYPE_PROFILES["solar_battery_ev"])
         agile = next(r for r in result["recommendations"] + result["alternatives"] if r["family"] == "agile")
         self.assertTrue(any("half hour" in c for c in agile["caveats"]))
+
+    def test_neither_no_longer_leads_with_a_wafer_thin_time_of_use_saving(self):
+        """Regression: a household with no solar, EV or battery has no way to earn a
+        time-of-use tariff's cheap windows on purpose, so a saving too thin to be more
+        than noise from the illustrative demand shape must not be the headline pick."""
+        result = run(ARCHETYPE_PROFILES["neither"])
+        self.assertEqual(self.top(result)["family"], "variable")
+        cosy = next(a for a in result["alternatives"] if a["family"] == "cosy")
+        self.assertLess(cosy["est_annual_cost_gbp"], self.top(result)["est_annual_cost_gbp"])  # still nominally cheaper...
+        self.assertTrue(any("Cosy" in n and "steadier default" in n for n in result["notes"]))  # ...but demoted, with a stated reason
+
+    def test_thin_margin_promotes_flexible_for_neither_with_a_note(self):
+        thin = Market("C", "x", [
+            tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48),
+            tariff("go", "IMPORT", "Octopus Go", 41.5, [26.05] * 48),  # 0.995% cheaper: below the 3% threshold
+        ], [])
+        result = run(dict(has_solar=False, has_ev=False), market=thin)
+        self.assertEqual(self.top(result)["family"], "variable")
+        self.assertTrue(any("Go" in n and "steadier default" in n for n in result["notes"]))
+        # the edged-out tariff is kept as the very next alternative, not buried
+        self.assertEqual(result["alternatives"][0]["family"], "go")
+
+    def test_large_margin_is_kept_for_neither_with_no_note(self):
+        large = Market("C", "x", [
+            tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48),
+            tariff("go", "IMPORT", "Octopus Go", 41.5, [20.0] * 48),  # about 21% cheaper: a real structural saving
+        ], [])
+        result = run(dict(has_solar=False, has_ev=False), market=large)
+        self.assertEqual(self.top(result)["family"], "go")
+        self.assertFalse(any("steadier default" in n for n in result["notes"]))
+
+    def test_thin_margin_rule_is_specific_to_the_neither_archetype(self):
+        """The same thin margin must not promote Flexible for a household that DOES have
+        a lever (here, an EV) - the rule only applies when there is no way to earn the
+        saving on purpose."""
+        thin = Market("C", "x", [
+            tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48),
+            tariff("go", "IMPORT", "Octopus Go", 41.5, [26.05] * 48),
+        ], [])
+        result = run(dict(has_solar=False, has_ev=True, ev_charging_pattern="overnight"), market=thin)
+        self.assertEqual(self.top(result)["family"], "go")
+        self.assertFalse(any("steadier default" in n for n in result["notes"]))
+
+    def test_thin_margin_rule_stacks_correctly_after_agile_demotion(self):
+        """When Agile is cheapest but gets demoted, the tariff that becomes the new
+        leader is itself checked against the same materiality threshold."""
+        stacked = Market("C", "x", [
+            tariff("variable", "IMPORT", "Flexible Octopus", 41.5, [26.35] * 48),
+            tariff("agile", "IMPORT", "Agile Octopus", 39.5, [15.0] * 48),  # cheapest raw, but demoted (can't shift)
+            tariff("go", "IMPORT", "Octopus Go", 41.5, [26.05] * 48),  # becomes leader after demotion, itself too thin
+        ], [])
+        result = run(dict(has_solar=False, has_ev=False), market=stacked)
+        self.assertEqual(self.top(result)["family"], "variable")
+        families_in_order = [self.top(result)["family"]] + [a["family"] for a in result["alternatives"] if a["role"] == "import"]
+        self.assertEqual(families_in_order, ["variable", "go", "agile"])
+        self.assertEqual(len(result["notes"]), 2)  # both the Agile note and the materiality note fire
 
     def test_battery_shifting_moves_energy_and_lowers_cost(self):
         with_shift = dict(has_solar=False, has_ev=False, has_battery=True, battery_kwh=10, battery_can_shift_to_offpeak=True)
@@ -511,6 +568,19 @@ class MixedEvPatternTests(unittest.TestCase):
         result = run({"has_solar": False, "has_ev": True, "ev_charging_pattern": "mixed"})
         go = next(r for r in result["recommendations"] + result["alternatives"] if r["family"] == "go")
         self.assertTrue(any("Only about 70%" in c for c in go["caveats"]))
+
+
+class IntelligentGoTests(unittest.TestCase):
+    def intelligent_go(self, result):
+        return next(r for r in result["recommendations"] + result["alternatives"] if r["family"] == "intelligent_go")
+
+    def test_always_carries_the_fixed_term_and_eligibility_caveat(self):
+        result = run(ARCHETYPE_PROFILES["ev_overnight"])
+        self.assertTrue(any("12-month fixed-term" in c for c in self.intelligent_go(result)["caveats"]))
+
+    def test_peak_rate_caveat_fires_like_go_and_cosy(self):
+        result = run(ARCHETYPE_PROFILES["ev_daytime_flexible"])
+        self.assertTrue(any("Peak rate" in c and "higher than" in c for c in self.intelligent_go(result)["caveats"]))
 
 
 if __name__ == "__main__":

@@ -69,9 +69,9 @@ def _trim(key: str, data: Any) -> Any:
         keep = {f"_{r}" for r in RECORD_REGIONS}
         fields = ("code", "full_name", "display_name", "direction", "is_variable", "is_prepay", "available_from", "available_to", "brand")
         trimmed = {f: data.get(f) for f in fields}
-        trimmed["single_register_electricity_tariffs"] = {
-            region: tariffs for region, tariffs in data["single_register_electricity_tariffs"].items() if region in keep
-        }
+        for register_key in ("single_register_electricity_tariffs", "four_rate_ev_electricity_tariffs"):
+            if register_key in data:
+                trimmed[register_key] = {region: tariffs for region, tariffs in data[register_key].items() if region in keep}
         return trimmed
     return data
 

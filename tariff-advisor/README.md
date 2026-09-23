@@ -231,10 +231,11 @@ This needs network access. Expect some `test_api.py` assertions to need updating
 Current products are discovered from the API each run, because Octopus product codes are dated and change over time.
 
 - **Standard variable**: Flexible Octopus
-- **Time-of-use import**: Agile Octopus (half-hourly), Octopus Go, Cosy Octopus
+- **Time-of-use import**: Agile Octopus (half-hourly), Octopus Go, Cosy Octopus, Intelligent Octopus Go
 - **Export**: Outgoing Octopus and Agile Outgoing Octopus
 
-Fixed-term and Intelligent Octopus Go products are not compared yet.
+Intelligent Octopus Go currently ships only as a 12-month fixed-term product (see its caveat in the
+recommendation output); other fixed-term products are not compared.
 
 ## How the recommendation works
 
