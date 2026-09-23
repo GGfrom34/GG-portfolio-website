@@ -196,6 +196,8 @@ web: uvicorn web_server:app --host 0.0.0.0 --port $PORT
 
 Set `ANTHROPIC_API_KEY` and `ALLOWED_ORIGIN` (the portfolio site's real origin) on the host, then point `BACKEND_URL` at the top of `case-studies/tariff-advisor-widget.js` at the deployed URL. The persisted token-budget file (`.budget_state.json` by default, overridable via `BUDGET_STATE_PATH`) needs to live on a writable, persistent disk — on a host with an ephemeral filesystem, set `BUDGET_STATE_PATH` to a mounted volume, otherwise the budget silently resets on every restart.
 
+**This project's own deployment** (`render.yaml`) uses Render's free web-service plan, which has no persistent disk *and* spins the instance down after ~15 minutes idle — its ephemeral filesystem is wiped on every spin-down, which would otherwise let anyone bypass the daily token budget just by waiting out an idle window between bursts. `.github/workflows/keep-tariff-advisor-warm.yml` pings `/health` every 10 minutes to keep the instance from ever idling out, closing that in practice. It does not protect against Render's own occasional maintenance restarts, so the free-tier deployment is meaningfully safer than an unmitigated one but still short of the hard guarantee a persistent disk (paid plan) or an externally-persisted store (e.g. Postgres) would give.
+
 ## Tests
 
 Four offline suites (standard-library `unittest`, no network, no real Anthropic calls):

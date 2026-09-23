@@ -1,0 +1,25 @@
+name: Keep tariff advisor backend warm
+
+# Render's free web-service tier spins the instance down after ~15 min of no inbound
+# requests, and its filesystem is ephemeral (wiped on every restart/spin-down). That
+# resets web_server.py's persisted daily token budget, which would otherwise let anyone
+# bypass the cap just by waiting out an idle window. Pinging /health well inside that
+# 15-minute window keeps the instance warm so the budget only resets when it's actually
+# supposed to (once a day), not on demand.
+#
+# Caveat: GitHub disables scheduled workflows automatically after 60 days with no repo
+# activity. If pings stop, re-enable this workflow from the Actions tab.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the backend's health endpoint
+        run: |
+          curl --fail --silent --show-error --max-time 30 \
+            https://octopus-tariff-advisor.onrender.com/health
