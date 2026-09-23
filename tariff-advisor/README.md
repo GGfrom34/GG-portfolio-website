@@ -168,7 +168,7 @@ It carries its own persona on top of the same `core.AGENT_INSTRUCTIONS` behavior
 | `PER_IP_RATE_LIMIT_PER_MIN` | 5 messages/minute | A burst limiter, separate from the token budgets above. |
 | `MAX_INPUT_CHARS` | 1,000 characters | Per message. |
 | `MAX_TURNS_PER_SESSION` | 12 tool-loop turns | Caps how long one conversation can run. |
-| `MAX_TOKENS_PER_CALL` | 400 | The `max_tokens` cap passed to each Anthropic call. |
+| `MAX_TOKENS_PER_CALL` | 900 | The `max_tokens` cap passed to each Anthropic call. (Originally 400; too tight to fit a full recommendation plus the assumed_inputs refine offer, so responses got cut off mid-sentence and replaying a truncated turn broke follow-up questions.) |
 
 Both token budgets are checked *before* every Anthropic call (using `max_tokens` as the reserved estimate) and reconciled against the actual `usage.input_tokens + usage.output_tokens` afterwards. Once either is exhausted, `/chat` returns a plain, non-technical message rather than an error, since running out is expected by design on a demo budget, not a fault. Sessions themselves are an in-memory, single-instance store (capped, oldest evicted first) — fine for a demo-scale service, but it means conversations and the rate limiter (though not the persisted token budgets) are lost on restart and are not shared across multiple instances.
 

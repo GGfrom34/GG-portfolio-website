@@ -46,7 +46,13 @@ log = logging.getLogger("tariff-advisor-web")
 # ---------------------------------------------------------------------------
 
 MODEL = os.environ.get("TARIFF_ADVISOR_MODEL", "claude-sonnet-5")
-MAX_TOKENS_PER_CALL = int(os.environ.get("MAX_TOKENS_PER_CALL", "400"))
+
+# 400 (this project's original default) was too tight: a full recommendation plus the
+# assumed_inputs "offer to refine" list routinely got cut off mid-sentence before reaching the
+# offer, and replaying that truncated turn back to the API is what broke follow-up questions.
+# 900 gives enough headroom for both to complete; tune alongside the daily token budgets, since
+# a higher per-call cap means fewer total exchanges fit in the same daily allowance.
+MAX_TOKENS_PER_CALL = int(os.environ.get("MAX_TOKENS_PER_CALL", "900"))
 MAX_INPUT_CHARS = int(os.environ.get("MAX_INPUT_CHARS", "1000"))
 MAX_TURNS_PER_SESSION = int(os.environ.get("MAX_TURNS_PER_SESSION", "12"))
 MAX_SESSIONS = int(os.environ.get("MAX_SESSIONS", "500"))
