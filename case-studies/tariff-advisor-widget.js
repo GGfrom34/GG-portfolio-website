@@ -171,6 +171,16 @@
     sendMessage(message);
   });
 
+  // A <textarea> doesn't submit its form on Enter (that's what lets it hold multiple lines), so
+  // Enter is wired up to send explicitly, leaving Shift+Enter free to insert a newline -- the
+  // standard chat-app convention. isComposing guards against submitting mid-IME-composition.
+  inputEl.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      formEl.requestSubmit();
+    }
+  });
+
   if (resetEl) {
     resetEl.addEventListener("click", function () {
       clearSessionId();

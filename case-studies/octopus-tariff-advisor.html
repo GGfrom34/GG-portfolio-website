@@ -158,8 +158,8 @@
         <div class="advisor-chat" id="advisor-chat" aria-live="polite"></div>
         <form id="advisor-form" class="advisor-form">
           <label for="advisor-input" class="sr-only">Your message</label>
-          <input id="advisor-input" type="text" autocomplete="off" maxlength="1000" required
-                 placeholder="e.g. I have solar panels and an EV, London, about 4500 kWh a year">
+          <textarea id="advisor-input" rows="3" autocomplete="off" maxlength="1000" required
+                    placeholder="e.g. I have solar panels and an EV, London, about 4500 kWh a year"></textarea>
           <button type="submit">Send</button>
         </form>
         <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
@@ -176,6 +176,6 @@
     </div>
   </footer>
 
-  <script src="tariff-advisor-widget.js?v=2" defer></script>
+  <script src="tariff-advisor-widget.js?v=3" defer></script>
 </body>
 </html>
