@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img">
+  <title>GG duotone tile favicon</title>
+  <defs>
+    <clipPath id="tileClip"><rect x="4" y="4" width="56" height="56" rx="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#tileClip)">
+    <rect x="4" y="4" width="56" height="56" fill="#2b5fd9"/>
+    <polygon points="4,60 60,60 60,4" fill="#0f1c3d"/>
+  </g>
+  <text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="24" fill="#ffffff">GG</text>
+</svg>
