@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img">
+  <title>GG hexagon circuit favicon</title>
+  <polygon points="32,4 56,18 56,46 32,60 8,46 8,18" fill="none" stroke="#2b5fd9" stroke-width="2.5" stroke-linejoin="round"/>
+  <circle cx="32" cy="4" r="2.5" fill="#2b5fd9"/>
+  <circle cx="32" cy="60" r="2.5" fill="#2b5fd9"/>
+  <text x="32" y="33" text-anchor="middle" dominant-baseline="central" font-family="Arial, Helvetica, sans-serif" font-weight="700" font-size="21" fill="#1a1a1a">GG</text>
+</svg>
