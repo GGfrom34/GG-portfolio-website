@@ -29,6 +29,24 @@
 
       <h1>Octopus Tariff Advisor</h1>
 
+      <section id="ask-the-advisor" class="advisor-widget">
+        <h2>Live demo</h2>
+        <p class="advisor-disclaimer">
+          A live demo of the agent described below. Informational only &mdash; not financial or
+          regulated switching advice, and not affiliated with Octopus Energy. Your messages are
+          sent to a small backend service to generate a reply and are not stored beyond this
+          conversation.
+        </p>
+        <div class="advisor-chat" id="advisor-chat" aria-live="polite"></div>
+        <form id="advisor-form" class="advisor-form">
+          <label for="advisor-input" class="sr-only">Your message</label>
+          <textarea id="advisor-input" rows="3" autocomplete="off" maxlength="1000" required
+                    placeholder="e.g. I have solar panels and an EV, London, about 4500 kWh a year"></textarea>
+          <button type="submit">Send</button>
+        </form>
+        <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
+      </section>
+
       <section id="problem">
         <h2>Problem</h2>
         <p>
@@ -134,14 +152,14 @@
         <img src="../images/octopus-tariff-advisor-web-chat-architecture.svg"
              alt="Architecture diagram of the live web chat demo: you ask a question in the chat widget on this page, which calls a web chat server hosted on Render. The server enforces guardrails and talks to Claude over the Anthropic API in a tool-use loop; when Claude calls a tool, the same shared tariff engine (core.py) runs and fetches live rates from the public Octopus Energy API."
              width="680" height="470" loading="lazy">
-        <figcaption>How the live chat demo below actually works, end to end.</figcaption>
+        <figcaption>How the live chat demo above actually works, end to end.</figcaption>
       </figure>
 
       <section id="outcome">
         <h2>Outcome</h2>
         <ul>
           <li>
-            A working, publicly hosted chat agent, embedded live on this page below &mdash; the same
+            A working, publicly hosted chat agent, embedded live at the top of this page &mdash; the same
             recommendation engine now sits behind three independent interfaces (CLI, MCP, web chat)
             without a single line of tariff logic duplicated between them.
           </li>
@@ -162,24 +180,6 @@
       <section id="repo">
         <h2>Repository</h2>
         <p><a href="https://github.com/GGfrom34/GG-portfolio-website/tree/main/tariff-advisor" target="_blank" rel="noopener noreferrer">View the GitHub repo</a></p>
-      </section>
-
-      <section id="ask-the-advisor" class="advisor-widget">
-        <h2>Ask the Tariff Advisor</h2>
-        <p class="advisor-disclaimer">
-          A live demo of the agent described above. Informational only &mdash; not financial or
-          regulated switching advice, and not affiliated with Octopus Energy. Your messages are
-          sent to a small backend service to generate a reply and are not stored beyond this
-          conversation.
-        </p>
-        <div class="advisor-chat" id="advisor-chat" aria-live="polite"></div>
-        <form id="advisor-form" class="advisor-form">
-          <label for="advisor-input" class="sr-only">Your message</label>
-          <textarea id="advisor-input" rows="3" autocomplete="off" maxlength="1000" required
-                    placeholder="e.g. I have solar panels and an EV, London, about 4500 kWh a year"></textarea>
-          <button type="submit">Send</button>
-        </form>
-        <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
       </section>
     </article>
   </main>
