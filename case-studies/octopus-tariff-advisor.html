@@ -105,6 +105,11 @@
             Anthropic SDK gotcha and a token-truncation bug, both now locked in with regression tests.
           </li>
           <li>
+            <strong>I insisted on regression tests over quick fixes.</strong> Every bug found in live
+            testing had to be reproduced, fixed, and locked in with a test proven to fail without the
+            fix &mdash; not patched and left unverified.
+          </li>
+          <li>
             <strong>I called the trade-offs, every time one came up.</strong> Free Render tier and
             its caveats vs. a paid plan, a lightweight keep-alive ping vs. a database migration, a
             plain reminder vs. full API automation for a scheduled change, one combined commit vs.
@@ -118,11 +123,10 @@
         <h2>Claude Code capabilities used</h2>
         <ul>
           <li><strong>Plan Mode</strong> &mdash; scoped the web chat backend's architecture and got it approved before any file was touched.</li>
-          <li><strong>Structured clarifying questions</strong> &mdash; asked at each real decision point (architecture, hosting tier, guardrail limits, how to schedule the revert) instead of guessing.</li>
           <li><strong>The in-app browser</strong> &mdash; drove the live deployed widget, read its network requests and console output, and reproduced two real bugs end-to-end against the real backend.</li>
           <li><strong>Web search</strong> &mdash; checked current provider docs (the Anthropic console, Render's free-tier behaviour) instead of relying on possibly outdated knowledge.</li>
-          <li><strong>A scheduled cloud agent</strong> &mdash; set via the <code>/schedule</code> skill, to fire a one-time reminder at a specific time the next day.</li>
-          <li><strong>Regression tests over quick fixes</strong> &mdash; every bug found in live testing was reproduced, fixed, and locked in with a test proven to fail without the fix.</li>
+          <li><strong>Claude Skills</strong> &mdash; after manually adding the Intelligent Octopus Go tariff touched half a dozen scattered per-family checks, wrote <code>.claude/skills/add-tariff-family/SKILL.md</code>: a project-scoped skill listing every place <code>core.py</code> branches on a tariff family (the <code>FAMILIES</code> entry, four separate Agile-like coupling sites, three reasoning branches, two ranking rules, plus the tests and docs that hardcode the family list), so the next new Octopus tariff gets added completely instead of silently missing one of them.</li>
+          <li><strong>Architecture diagram generation</strong> &mdash; produced the system architecture diagram now kept as case-study reference material, visualising how the CLI, MCP server and web chat all sit on top of the same core engine.</li>
         </ul>
       </section>
 
