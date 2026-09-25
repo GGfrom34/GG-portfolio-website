@@ -126,15 +126,15 @@
           <li><strong>The in-app browser</strong> &mdash; drove the live deployed widget, read its network requests and console output, and reproduced two real bugs end-to-end against the real backend.</li>
           <li><strong>Web search</strong> &mdash; checked current provider docs (the Anthropic console, Render's free-tier behaviour) instead of relying on possibly outdated knowledge.</li>
           <li><strong>Claude Skills</strong> &mdash; after manually adding the Intelligent Octopus Go tariff touched half a dozen scattered per-family checks, wrote <code>.claude/skills/add-tariff-family/SKILL.md</code>: a project-scoped skill listing every place <code>core.py</code> branches on a tariff family (the <code>FAMILIES</code> entry, four separate Agile-like coupling sites, three reasoning branches, two ranking rules, plus the tests and docs that hardcode the family list), so the next new Octopus tariff gets added completely instead of silently missing one of them.</li>
-          <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below early in the build, when the MCP server was the only interface, visualising how Claude Code, the tariff advisor, and the public Octopus Energy API actually connect.</li>
+          <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the live web chat's actual request path: browser to Render, Render to Claude, and the shared tariff engine's own call out to the Octopus Energy API.</li>
         </ul>
       </section>
 
       <figure class="case-study-figure">
-        <img src="../images/octopus-tariff-advisor-architecture.png"
-             alt="Architecture diagram: the Claude Code chat app talks to the Octopus Tariff Advisor MCP server running locally, which fetches live rates over the internet from the public, read-only Octopus Energy API."
-             width="680" height="456" loading="lazy">
-        <figcaption>The original MCP integration: Claude Code, the tariff advisor server, and the Octopus Energy API.</figcaption>
+        <img src="../images/octopus-tariff-advisor-web-chat-architecture.svg"
+             alt="Architecture diagram of the live web chat demo: you ask a question in the chat widget on this page, which calls a web chat server hosted on Render. The server enforces guardrails and talks to Claude over the Anthropic API in a tool-use loop; when Claude calls a tool, the same shared tariff engine (core.py) runs and fetches live rates from the public Octopus Energy API."
+             width="680" height="470" loading="lazy">
+        <figcaption>How the live chat demo below actually works, end to end.</figcaption>
       </figure>
 
       <section id="outcome">
