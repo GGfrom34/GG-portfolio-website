@@ -29,27 +29,118 @@
 
       <section id="problem">
         <h2>Problem</h2>
-        <p><em>Placeholder &mdash; describe the problem this project addresses.</em></p>
+        <p>
+          I needed a portfolio that argues for itself: something a senior PM actually built by
+          directing Claude Code and AI agents, not a templated site-builder export. That ruled out
+          frameworks and page builders in favour of plain HTML/CSS/JS, one repo, and one deploy
+          target &mdash; GitHub Pages &mdash; reviewable one change at a time like real software,
+          rather than a single wall of generated markup nobody ever looks at again.
+        </p>
+        <p>
+          The catch was I started from an empty folder with no Git installed, no GitHub CLI, and no
+          existing repo conventions to follow. Every later request &mdash; a link change, a rename,
+          a favicon, a whole new case study &mdash; needed to land through the same disciplined path:
+          a branch, a real commit message, a pull request, a merge, and a clean-up, not a shortcut
+          taken because it was "only two lines."
+        </p>
       </section>
 
       <section id="approach">
         <h2>Approach</h2>
-        <p><em>Placeholder &mdash; describe how the problem was approached.</em></p>
+        <p>
+          I started by asking for the scaffold itself: a home page with a one-line pitch, two
+          case-study placeholders, a shared stylesheet, and header/footer link placeholders for CV
+          and LinkedIn &mdash; kept deliberately plain over elaborate. From there I drove every
+          change as its own small, reviewed unit: rename this case study, change these two links,
+          add a favicon, backfill this content &mdash; each one previewed in an actual browser at
+          desktop and mobile widths before I ever saw it, then pushed through a branch &rarr; PR
+          &rarr; merge cycle rather than committed straight to <code>main</code>.
+        </p>
+        <p>
+          The environment fought back more than the content did. Git wasn't installed, so I got a
+          walkthrough for the <code>winget</code> install and a PATH fix, then had to work around a
+          shell process that couldn't see the newly installed <code>git.exe</code> until every
+          command re-pointed at its full path. The GitHub CLI had the same problem &mdash; install
+          it, hit the missing PATH again, and only after <code>gh auth login</code> could pull
+          requests open automatically. Even then, a multi-line PR body broke on PowerShell's argument
+          quoting, which needed a switch to <code>--body-file</code> to fix cleanly.
+        </p>
+      </section>
+
+      <section id="approach-steps">
+        <h2>Approach &mdash; step by step</h2>
+        <ul>
+          <li>
+            <strong>I set the workflow standard, and Claude Code held it for the rest of the
+            session.</strong> Once I approved the first branch &rarr; PR &rarr; merge cycle for a
+            small link change, Claude Code kept using it for every subsequent change without being
+            asked again, including checking with me before every push and every merge.
+          </li>
+          <li>
+            <strong>I made every account and tooling call myself.</strong> Installing Git and the
+            GitHub CLI, running <code>gh auth login</code> in my own terminal, and approving each
+            push and merge were mine to do; Claude Code diagnosed the underlying PATH and quoting
+            problems and told me exactly what to run.
+          </li>
+          <li>
+            <strong>I chose between the options it generated, rather than getting one default.</strong>
+            Claude Code designed five distinct "GG" favicon concepts &mdash; a circle badge, a hex
+            circuit, a duotone tile, a circuit chip, and a minimal wordmark &mdash; and rendered them
+            together for a side-by-side comparison. I picked the hex-circuit option, and only that
+            one was wired into the site.
+          </li>
+          <li>
+            <strong>I asked for verification, not just claims.</strong> Every visual change was
+            checked by starting a local preview server and taking real screenshots at desktop and
+            mobile widths, not accepted as "should work" from reading the code alone.
+          </li>
+          <li>
+            <strong>I kept unrelated work out of my commits.</strong> When another session's work
+            (the Tariff Advisor backend) landed in the same working directory, Claude Code staged and
+            committed only the files relevant to the task at hand rather than sweeping everything in
+            with a blanket <code>git add -A</code>.
+          </li>
+        </ul>
       </section>
 
       <section id="capabilities">
         <h2>Claude Code capabilities used</h2>
-        <p><em>Placeholder &mdash; list the Claude Code / agent capabilities used.</em></p>
+        <ul>
+          <li><strong>File scaffolding and iterative editing</strong> &mdash; generated the initial HTML/CSS/JS structure, then made every follow-up change as small targeted edits rather than regenerating whole files.</li>
+          <li><strong>The in-app browser</strong> &mdash; previewed every visual change against a real local server, at desktop and mobile widths, before calling it done, and screenshotted the result to confirm the favicon actually showed in the browser tab.</li>
+          <li><strong>Generated visual concepts</strong> &mdash; designed and rendered five distinct favicon options inline for a side-by-side comparison, rather than describing them in words.</li>
+          <li><strong>Git and GitHub CLI operations</strong> &mdash; initialised the repo, and ran every branch, commit, push, pull request, and merge for the session once the workflow was approved.</li>
+          <li><strong>Diagnosing environment issues rather than guessing</strong> &mdash; traced a missing <code>git</code>/<code>gh</code> command to a stale shell process rather than a bad install, and a broken pull-request body to PowerShell's argument quoting rather than the GitHub CLI itself.</li>
+        </ul>
       </section>
 
       <section id="outcome">
         <h2>Outcome</h2>
-        <p><em>Placeholder &mdash; describe the outcome and results.</em></p>
+        <ul>
+          <li>
+            A live, plain HTML/CSS/JS portfolio at
+            <a href="https://ggfrom34.github.io/GG-portfolio-website/" target="_blank" rel="noopener noreferrer">ggfrom34.github.io/GG-portfolio-website</a>,
+            deployed via GitHub Pages with no build step and no framework.
+          </li>
+          <li>
+            Every change since the initial scaffold &mdash; link edits, a case-study rename, a
+            favicon, this very case study &mdash; shipped through its own reviewed pull request,
+            merged deliberately rather than committed straight to <code>main</code>.
+          </li>
+          <li>
+            A consistent visual identity: a "GG" hex-circuit favicon reused as a centred logo on
+            every page, matching the site's existing accent colour.
+          </li>
+          <li>
+            A working template for future changes &mdash; branch, preview in a real browser, PR,
+            merge, clean up &mdash; proven across half a dozen real changes, not just described.
+          </li>
+        </ul>
       </section>
 
       <section id="repo">
         <h2>Repository</h2>
-        <p><!-- TODO: replace with the actual repo link --><a href="#">View the GitHub repo</a></p>
+        <p><a href="https://github.com/GGfrom34/GG-portfolio-website" target="_blank" rel="noopener noreferrer">View the GitHub repo</a></p>
       </section>
     </article>
   </main>
