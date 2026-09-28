@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRD to Jira Workflow &mdash; Guillaume Goujon</title>
+  <meta name="description" content="Case study: a two-agent, human-gated workflow that turns a PRD into a structured Jira Epic and its Story/Task issues.">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../styles.css?v=3">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-icon">
+      <img src="../favicon.svg" alt="GG logo" width="40" height="40">
+    </div>
+    <div class="header-inner">
+      <a class="home-link" href="../index.html">
+        <img src="../profile.webp" alt="Guillaume Goujon" class="profile-photo" width="44" height="44">
+      </a>
+      <div class="header-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="case-study">
+      <a class="back-link" href="../index.html">&larr; Back to all case studies</a>
+
+      <h1>PRD to Jira Workflow</h1>
+
+      <section id="problem">
+        <h2>Problem</h2>
+        <p>
+          Turning a PRD into Jira issues usually means one of two failure modes: an agent that reads
+          a rough draft and mechanically turns every section into a ticket, gaps and all, or a person
+          doing it by hand and never noticing the PRD itself was missing a success metric or an
+          acceptance criterion until an engineer asks about it mid-sprint. I wanted a workflow that
+          catches PRD gaps <em>before</em> anything reaches Jira, actually fixes them with my input
+          rather than just flagging them, and only then proposes how the work should be split into
+          issues &mdash; with me approving both the PRD and the breakdown, not just the final click.
+        </p>
+        <p>
+          The other constraint was tool boundaries. A single agent with both PRD-editing judgement and
+          live Jira write access is one agent whose one mistake reaches a real project. I wanted the
+          critique, the editing, and the Jira write calls kept in separate hands, so a stray instruction
+          in one stage couldn't silently trigger a write in another.
+        </p>
+      </section>
+
+      <section id="approach">
+        <h2>Approach</h2>
+        <p>
+          I split the work into two subagents plus one inline skill, each with a single job and its
+          own tool access, rather than one agent doing everything. <code>prd-quality-reviewer</code>
+          only ever reads and critiques a PRD against a fixed rubric &mdash; problem statement,
+          success metrics, scope, acceptance criteria, edge cases, non-functional requirements,
+          dependencies/risks, rollout plan &mdash; and has no write tools at all, so it can't have
+          changed anything by the time it hands back. <code>improve-prd</code> is a skill, not an
+          agent: it runs inline in the main conversation, sharing the reviewer's exact rubric, and
+          proposes concrete before/after text for each gap that I sign off on before it's written in.
+          <code>jira-epic-builder</code> is the only piece with Jira write access, and it's scoped to
+          run only after I've explicitly said the PRD is final.
+        </p>
+        <p>
+          I used this exact pipeline on a real PRD in this session: reviewed a draft, worked through
+          every flagged gap in batches with concrete before/after text, then asked for a second
+          independent review pass on my own fixes rather than assuming they'd landed correctly &mdash;
+          which is what caught a retention requirement that named a policy but never said how it would
+          actually be enforced, and an acceptance criterion that quietly contradicted a risk noted
+          three sections later. Only once that second pass came back clean did I approve it for Jira.
+        </p>
+      </section>
+
+      <section id="approach-steps">
+        <h2>Approach &mdash; step by step</h2>
+        <ul>
+          <li>
+            <strong>I kept critique, editing, and Jira writes in three separate hands.</strong> The
+            reviewer subagent can't write anything; the improve-prd skill can only edit the PRD text in
+            the open, inline; the epic-builder subagent is the only one with Jira access, and only once
+            invoked deliberately after PRD sign-off &mdash; not available by default in general
+            conversation where a stray instruction could otherwise trigger a write.
+          </li>
+          <li>
+            <strong>I approved every PRD edit individually, not the batch.</strong> For each gap the
+            reviewer flagged, I was asked a targeted clarifying question, shown the proposed before/after
+            text, and gave explicit sign-off before it was written into the file &mdash; across roughly
+            fifteen distinct gaps, in batches I could actually evaluate rather than one giant diff.
+          </li>
+          <li>
+            <strong>I asked for a second, independent review after the fixes, instead of assuming they
+            landed.</strong> Re-running <code>prd-quality-reviewer</code> against my own edited PRD
+            caught a requirement that was named but not operationalised (a 6-month retention policy with
+            no stated mechanism) and an acceptance criterion that contradicted a risk noted elsewhere in
+            the same document &mdash; both fixed in a further round before I called the PRD final.
+          </li>
+          <li>
+            <strong>I gated the Jira write on two separate confirmations, not one.</strong>
+            <code>jira-epic-builder</code> asked me to confirm the target Jira project, then proposed a
+            full Epic + Story/Task breakdown and asked for sign-off on that specific split, before a
+            single <code>createJiraIssue</code> call was made. PRD readiness and issue breakdown are
+            different judgement calls, so they got different checkpoints.
+          </li>
+          <li>
+            <strong>I asked for verification of the Jira write, not just a success message.</strong> The
+            builder read every created issue back via <code>getJiraIssue</code> and a JQL search to
+            confirm the parent-Epic link had actually taken, rather than trusting the create call's own
+            response.
+          </li>
+        </ul>
+      </section>
+
+      <section id="capabilities">
+        <h2>Claude Code capabilities used</h2>
+        <ul>
+          <li><strong>Specialised subagents with scoped tool access</strong> &mdash; a read-only reviewer and a Jira-writing epic builder, each isolated from the other's context and permissions.</li>
+          <li><strong>A project skill for the editing step</strong> &mdash; <code>improve-prd</code> runs inline in the main conversation, sharing one rubric with the reviewer subagent so the two never drift apart in what counts as "done."</li>
+          <li><strong>Iterative sign-off via targeted questions</strong> &mdash; every PRD gap was resolved through a specific clarifying question and a before/after diff, not a single bulk edit.</li>
+          <li><strong>A second, independent review pass</strong> &mdash; re-invoked the same reviewer subagent against my own fixes and treated its findings as real, which is what caught the two issues a single pass would have missed.</li>
+          <li><strong>An official remote MCP server for Jira</strong> &mdash; Atlassian's hosted, OAuth-authenticated MCP server, registered with a URL and no secrets committed to the repo, instead of a custom-built integration.</li>
+          <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the actual two-agent, two-gate pipeline this PRD went through.</li>
+        </ul>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-to-jira-workflow-architecture.svg"
+             alt="Architecture of the PRD-to-Jira workflow: you provide a draft PRD, the prd-quality-reviewer subagent reports gaps, the improve-prd skill fixes them inline with your sign-off, looping until clean. You give a first sign-off that the PRD is final, the jira-epic-builder subagent proposes an Epic plus Story and Task breakdown, you give a second sign-off approving that breakdown, and only then are the Epic and its issues created in Jira Cloud via Atlassian's remote MCP server, read back afterwards to verify."
+             width="680" height="600" loading="lazy">
+        <figcaption>The two-agent, two-gate pipeline this PRD actually went through, end to end.</figcaption>
+      </figure>
+
+      <section id="outcome">
+        <h2>Outcome</h2>
+        <ul>
+          <li>
+            A reusable, human-gated pipeline &mdash; <code>prd-quality-reviewer</code> &rarr;
+            <code>improve-prd</code> &rarr; <code>jira-epic-builder</code> &mdash; that never reaches
+            Jira without two explicit checkpoints: PRD sign-off, then breakdown sign-off.
+          </li>
+          <li>
+            A real PRD carried through the full loop: an initial review flagged two blockers and nine
+            further gaps, every one resolved with an individually approved edit, and a second review
+            pass caught two more issues the first round of fixes had introduced or left unfinished.
+          </li>
+          <li>
+            Six live Jira issues &mdash; one Epic and five linked Story/Task issues &mdash; created in a
+            real Jira Cloud project and verified by reading the parent-Epic link back, not just trusting
+            the create call's response.
+          </li>
+          <li>
+            A documented rationale for every structural decision &mdash; why the reviewer stays
+            read-only, why editing runs inline instead of in an isolated subagent, why the epic builder
+            queries issue types at runtime instead of hardcoding "Story" &mdash; written down as the
+            build happened, not reconstructed afterwards.
+          </li>
+        </ul>
+      </section>
+
+      <section id="repo">
+        <h2>Repository</h2>
+        <p><a href="https://github.com/GGfrom34/GG-portfolio-website/tree/main/prd-to-jira" target="_blank" rel="noopener noreferrer">View the GitHub repo</a></p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>&copy; 2026 Guillaume Goujon</span>
+      <div class="footer-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link-footer" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
