@@ -17,6 +17,16 @@ The code is split into core logic and an interface, so the same logic can sit be
 
 Inside `core.py` the API-calling code is kept apart from the recommendation logic. The API layer fetches rates and returns normalised `Tariff` / `Market` objects. The recommendation engine works on those objects with no network access, so it can be tested offline by passing a hand-built `Market` to `recommend_tariff(profile, market=...)`. All three interfaces reuse the core unchanged, because it returns structured data rather than formatted text. Two things every model-driven interface needs are defined once in `core.py` rather than copied per adapter: `AGENT_INSTRUCTIONS` (the "answer first, then offer to refine" behavioral contract, wrapped in each adapter's own persona/framing) and `MarketCache` (a short TTL cache over `fetch_market`, since one recommendation costs about a dozen HTTP requests and a conversation tends to ask several times).
 
+## Adding a new tariff family
+
+`core.py` has no per-family class hierarchy — family-specific behaviour is
+expressed as `tariff.family == "..."` checks scattered across several
+functions. When Octopus launches a new tariff, follow
+[`.claude/skills/add-tariff-family/SKILL.md`](../.claude/skills/add-tariff-family/SKILL.md):
+a checklist of every place a family needs to be added (the `FAMILIES` entry,
+the Agile-like coupling, the reasoning branches, the ranking rules, tests and
+docs), so a new addition doesn't silently miss one of them.
+
 ## Requirements
 
 - **Core and CLI:** Python 3.9 or later, standard library only. No API key is needed, because only Octopus's public product and rate endpoints are used.
