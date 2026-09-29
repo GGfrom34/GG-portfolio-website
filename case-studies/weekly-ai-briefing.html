@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekly AI Competitive Briefing &mdash; Guillaume Goujon</title>
+  <meta name="description" content="Case study: a Cowork scheduled task running a bounded, hard-gated multi-agent pipeline that produces a weekly AI competitive-intelligence briefing.">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../styles.css?v=4">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-icon">
+      <img src="../favicon.svg" alt="GG logo" width="40" height="40">
+    </div>
+    <div class="header-inner">
+      <a class="home-link" href="../index.html">
+        <img src="../profile.webp" alt="Guillaume Goujon" class="profile-photo" width="44" height="44">
+      </a>
+      <div class="header-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="case-study">
+      <a class="back-link" href="../index.html">&larr; Back to all case studies</a>
+
+      <h1>Weekly AI Competitive Briefing</h1>
+
+      <section id="problem">
+        <h2>Problem</h2>
+        <p>
+          I wanted to stay current on two fast-moving markets &mdash; AI dev tools and enterprise AI
+          agents &mdash; without manually scanning news for either every week. That's a research task,
+          which on its own just means pointing an agent at the web. The harder problem is that a
+          briefing exists specifically to make checkable claims: "pricing changed," "a new feature
+          shipped." A research agent generating those from a web search carries a real fabrication
+          risk on exactly the statements the briefing is supposed to get right, and a wrong one is
+          worse than no briefing at all if it's presented with the same confidence as a correct one.
+        </p>
+        <p>
+          So the brief had to do more than summarise search results. It had to report genuine
+          week-over-week change rather than restating the status quo, back every factual claim with a
+          source, and refuse to present itself as finished when it couldn't clear its own bar &mdash;
+          all without me reading a draft every Wednesday morning to catch the difference.
+        </p>
+      </section>
+
+      <section id="approach">
+        <h2>Approach</h2>
+        <p>
+          This one runs as a Cowork scheduled task, not a local Claude Code CLI script like my other
+          case studies &mdash; the same design discipline (bounded steps, scoped agents, a hard gate
+          before anything ships) applied to a different part of the Claude platform, one built for
+          unattended, recurring execution rather than an interactive session at my keyboard.
+        </p>
+        <p>
+          I built it as a bounded, hard-gated pipeline, run separately per industry. A draft subagent
+          researches and writes the brief with every claim sourced; a separate critic subagent with no
+          memory of the drafting reviews it; the draft agent gets exactly one bounded revision round,
+          not an open-ended loop; and a second, stricter critic pass acts as a hard verification gate
+          &mdash; it doesn't just re-read the text, it independently re-fetches all three source links
+          to confirm they're actually live and show full article text rather than a paywall, and
+          confirms each claim's source genuinely supports it. Only the top-level orchestrating
+          session, never either subagent, is allowed to write to Drive or send email, and it does so
+          strictly on that verdict. The whole pipeline is packaged as a saved Skill, invoked by a
+          Cowork scheduled task every Wednesday at 5:58am London time, fully unattended.
+        </p>
+      </section>
+
+      <section id="approach-steps">
+        <h2>Approach &mdash; step by step</h2>
+        <ul>
+          <li>
+            <strong>I gated the pipeline on real change, not a blind rerun.</strong> The first step is
+            always looking up last week's brief for that industry in Google Drive, so the output
+            reports genuine week-over-week change instead of restating whatever's still true.
+          </li>
+          <li>
+            <strong>I separated drafting from verification completely.</strong> The draft subagent
+            researches pricing changes, new product or feature announcements, and funding/M&amp;A
+            activity, plus a short synthesis line &mdash; and every factual claim it writes carries an
+            inline source link, not just a general "sources" list at the end.
+          </li>
+          <li>
+            <strong>I gave the critic no memory of the drafting.</strong> The critic subagent is a
+            separate agent reviewing the draft cold, so it can't inherit the drafter's own framing of
+            what counts as sufficiently sourced.
+          </li>
+          <li>
+            <strong>I bounded the revision to exactly one round.</strong> The draft agent gets one
+            chance to address the critic's issues &mdash; not an open-ended back-and-forth that could
+            loop indefinitely on a task nobody's watching run.
+          </li>
+          <li>
+            <strong>I made the second critic pass an actual verification gate, not another opinion.</strong>
+            It confirms every issue from the first pass was resolved, independently re-fetches all
+            three source links to confirm they're live and show full article text rather than a
+            paywall, and confirms each pricing/feature claim's source actually supports it &mdash; then
+            returns a strict PASS or FAIL, nothing softer.
+          </li>
+          <li>
+            <strong>I kept write access in exactly one place.</strong> Neither subagent can touch Drive
+            or Gmail; only the orchestrating session can, and only after the verdict. PASS creates a
+            Doc titled "FINAL - [industry] Weekly Briefing - [date]" and sends a "ready" email. FAIL
+            creates a Doc titled "DRAFT - ..." instead and sends an email explaining exactly why, so a
+            shaky draft is never quietly presented as finished.
+          </li>
+        </ul>
+      </section>
+
+      <section id="capabilities">
+        <h2>Claude Code capabilities used</h2>
+        <ul>
+          <li><strong>Cowork scheduled tasks</strong> &mdash; a cron-based trigger runs the whole pipeline unattended every Wednesday at 5:58am London time, with no session open on my end.</li>
+          <li><strong>A saved Skill</strong> &mdash; the multi-step, multi-agent pipeline is packaged as a single Skill the scheduled task invokes, rather than a one-off prompt.</li>
+          <li><strong>Subagents scoped by task, not just by technical restriction</strong> &mdash; the drafting and critique agents are only ever asked to produce text, so the ability to write to Drive or Gmail stays concentrated in exactly one place.</li>
+          <li><strong>An explicit automated verification gate</strong> &mdash; a second, stricter critic pass decides between two output states (PASS/FAIL) with independent source re-verification, instead of a single agent self-certifying its own draft.</li>
+          <li><strong>Native Google Drive and Gmail connectors</strong> &mdash; used only by the orchestrating session, for the Drive diff lookup, the Doc creation, and the outcome email.</li>
+          <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the actual six-step pipeline, including the PASS/FAIL branch.</li>
+        </ul>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/weekly-ai-briefing-architecture.svg"
+             alt="Architecture of the pipeline, run per industry every Wednesday: it looks up last week's brief in Google Drive to diff against, a draft subagent researches and writes the brief with every claim carrying an inline source link, a critic subagent with no memory of the drafting reviews it and lists issues, the draft agent gets exactly one bounded revision round, and a second stricter critic pass acts as a verification gate that re-fetches all three source links and confirms every claim is supported before returning PASS or FAIL. Only the top-level orchestrating session acts on that verdict: on PASS it creates a Doc titled FINAL and sends a ready email; on FAIL it creates a Doc titled DRAFT instead and sends an email explaining exactly why."
+             width="680" height="580" loading="lazy">
+        <figcaption>The bounded, hard-gated pipeline, run per industry every Wednesday &mdash; only the top-level orchestrating session, never a subagent, writes to Drive or sends email.</figcaption>
+      </figure>
+
+      <section id="outcome">
+        <h2>Outcome</h2>
+        <p>
+          As of this first run &mdash; Wednesday, September 29, 2026, the first edition, so there's no
+          prior-week baseline yet &mdash; the pipeline produced both possible outcomes in the same run,
+          one per industry:
+        </p>
+        <ul>
+          <li>
+            The <strong>AI dev tools</strong> brief passed verification: a Google Doc titled
+            "FINAL - AI dev tools Weekly Briefing - 2026-09-29" was created, and a "ready" email was
+            sent with the link.
+          </li>
+          <li>
+            The <strong>Enterprise AI agents</strong> brief didn't pass: it was filed as
+            "DRAFT - Enterprise AI agents Weekly Briefing - 2026-09-29" instead of FINAL, with a
+            warning banner inside the document itself ("This draft did not pass final verification
+            &mdash; see the note at the bottom before relying on it"), and an email explaining exactly
+            why &mdash; not a shaky draft quietly presented as finished.
+          </li>
+          <li>
+            That's real evidence the gate discriminates rather than rubber-stamping: the same run, on
+            the same day, produced one PASS and one FAIL, correctly routed to two different document
+            titles and two different emails.
+          </li>
+        </ul>
+        <p>
+          <em>This is the first edition, so there's no run history or pass/fail rate to report yet
+          &mdash; I'll add that once a few more weeks have landed.</em>
+        </p>
+      </section>
+
+      <section id="how-its-defined">
+        <h2>How it's defined</h2>
+        <p>
+          There's no separate GitHub repo for this one. The "source" is a saved Skill
+          (<code>weekly-ai-briefing</code>) packaging the six-step pipeline above, plus a Cowork
+          scheduled-task config that invokes it every Wednesday &mdash; both living in my Claude
+          account rather than in a code repository.
+        </p>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/weekly-ai-briefing-drive-folder.png"
+             alt="Google Drive folder '0 - AI weekly briefs' showing two files from the same run, both dated 2026-09-29: 'DRAFT - Enterprise AI agents Weekly Briefing - 2026-09-29', modified 11:36 AM, and 'FINAL - AI dev tools Weekly Briefing - 2026-09-29', modified 11:27 AM, both owned by me."
+             width="1612" height="562" loading="lazy">
+        <figcaption>The real Drive output of the first run: one industry passed verification, the other didn't &mdash; and the files are named accordingly instead of being treated the same.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/weekly-ai-briefing-draft-warning.png"
+             alt="The DRAFT Enterprise AI agents brief open in Google Docs, showing a methodology note about applying extra scrutiny to vendor self-reporting, and a highlighted warning reading: 'This draft did not pass final verification — see the note at the bottom before relying on it,' directly above the first section on pricing changes."
+             width="926" height="748" loading="lazy">
+        <figcaption>When the verifier fails a draft, the gate doesn't just rename the file &mdash; it puts the warning inside the document itself.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/weekly-ai-briefing-inbox.png"
+             alt="Gmail inbox showing two automated emails, both timestamped 11:51, both from the pipeline's own account: 'Briefing draft failed final review — Enterprise AI agents — 2026-09-29' and 'AI dev tools Weekly AI Briefing — 2026-09-29 — ready'."
+             width="1033" height="241" loading="lazy">
+        <figcaption>The two automated emails from that same run &mdash; one flagging a failed review, one confirming a brief is ready.</figcaption>
+      </figure>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>&copy; 2026 Guillaume Goujon</span>
+      <div class="footer-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link-footer" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

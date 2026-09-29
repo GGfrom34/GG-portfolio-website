@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 580" width="680" height="580" role="img" font-family="Arial, Helvetica, sans-serif">
+  <title>Architecture of the Weekly AI Competitive Briefing pipeline</title>
+  <desc>Run per industry, every Wednesday, as a Cowork scheduled task. The pipeline first looks up last week's brief in Google Drive to diff against. A draft subagent researches and writes the brief, with every factual claim carrying an inline source link. A separate critic subagent, with no memory of the drafting, reviews it and lists concrete issues. The draft agent gets exactly one bounded revision round to address them, not an open-ended loop. The critic agent then runs a second, stricter pass as a hard verification gate: it confirms every issue from the first pass was resolved, independently re-fetches all three source links to confirm they are live and show full article text rather than a paywall, and confirms each claim's source actually supports it, returning a strict pass or fail. Only the top-level orchestrating session, never a subagent, writes to Drive or sends email. On a pass, it creates a Google Doc titled 'FINAL' and sends a ready email with the link. On a fail, it creates a Doc titled 'DRAFT' instead and sends an email explaining exactly why, so a shaky draft is never silently presented as finished.</desc>
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect x="190" y="30" width="300" height="50" rx="4" fill="#e6f1fb" stroke="#185fa5" stroke-width="0.5"/>
+  <text x="340" y="50" text-anchor="middle" font-size="14" font-weight="700" fill="#042c53">Look up last week's brief</text>
+  <text x="340" y="68" text-anchor="middle" font-size="12" fill="#0c447c">Google Drive — per industry, to diff against</text>
+
+  <line x1="340" y1="80" x2="340" y2="108" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+  <rect x="190" y="108" width="300" height="64" rx="4" fill="#eeedfe" stroke="#534ab7" stroke-width="0.5"/>
+  <text x="340" y="130" text-anchor="middle" font-size="14" font-weight="700" fill="#26215c">Draft agent (subagent)</text>
+  <text x="340" y="148" text-anchor="middle" font-size="12" fill="#3c3489">Pricing, features, funding/M&amp;A, synthesis</text>
+  <text x="340" y="164" text-anchor="middle" font-size="12" fill="#3c3489">Every claim carries an inline source link</text>
+
+  <line x1="340" y1="172" x2="340" y2="200" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+  <rect x="190" y="200" width="300" height="54" rx="4" fill="#eeedfe" stroke="#534ab7" stroke-width="0.5"/>
+  <text x="340" y="221" text-anchor="middle" font-size="14" font-weight="700" fill="#26215c">Critic agent (subagent)</text>
+  <text x="340" y="239" text-anchor="middle" font-size="12" fill="#3c3489">No memory of drafting — lists concrete issues</text>
+
+  <line x1="340" y1="254" x2="340" y2="282" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <text x="352" y="272" text-anchor="start" font-size="11" fill="#5f5e5a">Exactly one bounded revision round</text>
+
+  <rect x="190" y="282" width="300" height="54" rx="4" fill="#eeedfe" stroke="#534ab7" stroke-width="0.5"/>
+  <text x="340" y="303" text-anchor="middle" font-size="14" font-weight="700" fill="#26215c">Draft agent revises</text>
+  <text x="340" y="321" text-anchor="middle" font-size="12" fill="#3c3489">Addresses the critic's issues, once</text>
+
+  <line x1="340" y1="336" x2="340" y2="364" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+
+  <rect x="190" y="364" width="300" height="74" rx="4" fill="#fff8e6" stroke="#b98900" stroke-width="0.75" stroke-dasharray="4 3"/>
+  <text x="340" y="386" text-anchor="middle" font-size="14" font-weight="700" fill="#5c4400">Critic agent — verification gate</text>
+  <text x="340" y="404" text-anchor="middle" font-size="11.5" fill="#8a6400">Re-fetches all 3 sources; confirms fixes &amp; claims hold</text>
+  <text x="340" y="421" text-anchor="middle" font-size="12" font-weight="700" fill="#8a6400">Returns PASS or FAIL</text>
+
+  <line x1="340" y1="438" x2="195" y2="466" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <line x1="340" y1="438" x2="485" y2="466" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow2)"/>
+  <text x="222" y="453" text-anchor="middle" font-size="12" font-weight="700" fill="#27500a">PASS</text>
+  <text x="470" y="453" text-anchor="middle" font-size="12" font-weight="700" fill="#8a2a1e">FAIL</text>
+
+  <rect x="60" y="470" width="270" height="95" rx="4" fill="#eaf3de" stroke="#639922" stroke-width="0.5"/>
+  <text x="195" y="493" text-anchor="middle" font-size="13.5" font-weight="700" fill="#173404">Orchestrating session</text>
+  <text x="195" y="512" text-anchor="middle" font-size="11.5" fill="#27500a">Doc titled "FINAL - ... Weekly Briefing"</text>
+  <text x="195" y="529" text-anchor="middle" font-size="11.5" fill="#27500a">Sends a "ready" email with the link</text>
+  <text x="195" y="550" text-anchor="middle" font-size="10.5" fill="#4a6b34" font-style="italic">Only the orchestrator writes to Drive/Gmail</text>
+
+  <rect x="350" y="470" width="270" height="95" rx="4" fill="#fbeceb" stroke="#a33b2e" stroke-width="0.5"/>
+  <text x="485" y="493" text-anchor="middle" font-size="13.5" font-weight="700" fill="#5c1710">Orchestrating session</text>
+  <text x="485" y="512" text-anchor="middle" font-size="11.5" fill="#8a2a1e">Doc titled "DRAFT - ... Weekly Briefing"</text>
+  <text x="485" y="529" text-anchor="middle" font-size="11.5" fill="#8a2a1e">Email explains exactly why it failed</text>
+  <text x="485" y="550" text-anchor="middle" font-size="10.5" fill="#8a4a40" font-style="italic">Never silently shown as finished</text>
+</svg>
