@@ -35,9 +35,16 @@ def tool_use_block(name: str, input_: dict) -> FakeBlock:
     return FakeBlock(type="tool_use", id="toolu_fake", name=name, input=input_)
 
 
+class FakeUsage:
+    def __init__(self, input_tokens: int = 10, output_tokens: int = 5):
+        self.input_tokens = input_tokens
+        self.output_tokens = output_tokens
+
+
 class FakeMessage:
-    def __init__(self, content):
+    def __init__(self, content, usage: FakeUsage = None):
         self.content = content
+        self.usage = usage or FakeUsage()
 
 
 class FakeMessagesApi:
@@ -423,6 +430,81 @@ class GroundedAnswerTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# on_usage: every model call must report real usage back to the caller, so a
+# web backend can meter spend without handle_message's return shape changing.
+# ---------------------------------------------------------------------------
+
+def _usage_recorder():
+    calls: list[tuple[str, int, int]] = []
+    return calls, (lambda call_name, input_tokens, output_tokens: calls.append((call_name, input_tokens, output_tokens)))
+
+
+class UsageAccountingTests(unittest.TestCase):
+    def test_classify_message_reports_usage(self):
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([FakeMessage(
+            [tool_use_block("classify_message", {"category": "general", "rationale": "x"})], usage=FakeUsage(111, 22),
+        )])
+        core.classify_message("test", client=client, on_usage=on_usage)
+        self.assertEqual(calls, [("classify_message", 111, 22)])
+
+    def test_find_identifying_substrings_reports_usage(self):
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([FakeMessage([tool_use_block("flag_identifying_substrings", {"substrings": []})], usage=FakeUsage(50, 5))])
+        core.find_identifying_substrings("hello", client=client, on_usage=on_usage)
+        self.assertEqual(calls, [("find_identifying_substrings", 50, 5)])
+
+    def test_generate_grounded_answer_reports_usage_only_when_it_calls_the_model(self):
+        calls, on_usage = _usage_recorder()
+        corpus = make_corpus()
+        client = FakeAnthropicClient([FakeMessage(
+            [tool_use_block("respond_from_sources", {"outcome": "answer", "text": "t", "citations": [corpus.pages[0].url]})],
+            usage=FakeUsage(200, 80),
+        )])
+        core.generate_grounded_answer("q", [], corpus, client=client, on_usage=on_usage)
+        self.assertEqual(calls, [("generate_grounded_answer", 200, 80)])
+
+        calls.clear()
+        core.generate_grounded_answer("q", [], core.HelpCorpus([]), client=FakeAnthropicClient([]), on_usage=on_usage)
+        self.assertEqual(calls, [])  # empty corpus -> no model call -> no usage
+
+    def test_usage_reported_even_on_a_malformed_classify_response(self):
+        # Tokens are billed whether or not the response was usable.
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([FakeMessage([text_block("no tool use")], usage=FakeUsage(30, 1))])
+        with self.assertRaises(core.ClassificationError):
+            core.classify_message("test", client=client, on_usage=on_usage)
+        self.assertEqual(calls, [("classify_message", 30, 1)])
+
+    def test_handle_message_accumulates_usage_across_classify_only(self):
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([classify_response("account_specific")])
+        core.handle_message("balance?", client=client, jira_config=None, on_usage=on_usage)
+        self.assertEqual([c[0] for c in calls], ["classify_message"])
+
+    def test_handle_message_accumulates_usage_across_classify_and_answer(self):
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([
+            classify_response("general", topic_query="how do I read my meter", topic_category_slugs=["meters"]),
+            answer_response("text", [METER_ARTICLE_URL]),
+        ])
+        core.handle_message("how do I read my meter?", client=client, http_get=_http_get_with_one_matching_article(),
+                             jira_config=None, on_usage=on_usage)
+        self.assertEqual([c[0] for c in calls], ["classify_message", "generate_grounded_answer"])
+
+    def test_handle_message_accumulates_usage_across_classify_answer_and_redact(self):
+        calls, on_usage = _usage_recorder()
+        client = FakeAnthropicClient([
+            classify_response("general", topic_query="how do I read my meter", topic_category_slugs=["meters"]),
+            insufficient_response(),
+            redact_response([]),
+        ])
+        core.handle_message("how do I read my meter?", client=client, http_get=_http_get_with_one_matching_article(),
+                             jira_config=None, on_usage=on_usage)
+        self.assertEqual([c[0] for c in calls], ["classify_message", "generate_grounded_answer", "find_identifying_substrings"])
+
+
+# ---------------------------------------------------------------------------
 # handle_message: end-to-end dispatch, fully faked (client, http_get, Jira)
 # ---------------------------------------------------------------------------
 
@@ -535,6 +617,24 @@ class EndToEndDispatchTests(unittest.TestCase):
         http_get = _http_get_with_no_matches()
         result = core.handle_message("completely unmatched zyzzyx topic", client=client, http_get=http_get, jira_config=None)
         self.assertEqual(result["reason"], "content_gap")  # still a normal redirect, just not logged
+
+    def test_index_fetch_override_is_used_instead_of_the_default(self):
+        client = FakeAnthropicClient([
+            classify_response("general", topic_query="how do I read my meter", topic_category_slugs=["meters"]),
+            answer_response("text", [METER_ARTICLE_URL]),
+        ])
+        http_get = _http_get_with_one_matching_article()
+        calls: list[str] = []
+
+        def fake_index_fetch(slug: str, *, http_get=None) -> list[tuple[str, str]]:
+            calls.append(slug)
+            return [(METER_ARTICLE_URL, METER_ARTICLE_TITLE)] if slug == "meters" else []
+
+        result = core.handle_message("how do I read my meter?", client=client, http_get=http_get,
+                                      index_fetch=fake_index_fetch, jira_config=None)
+        self.assertEqual(result["type"], "GROUNDED_ANSWER")
+        self.assertIn("meters", calls)
+        self.assertEqual(len(calls), len(core.CATEGORY_SLUGS))  # every slug went through the override, not the real fetch
 
 
 if __name__ == "__main__":

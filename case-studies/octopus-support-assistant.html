@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octopus Support Assistant &mdash; Guillaume Goujon</title>
+  <meta name="description" content="Case study: an independent, unofficial AI customer-support chat assistant for Octopus Energy customers.">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../styles.css?v=4">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-icon">
+      <img src="../favicon.svg" alt="GG logo" width="40" height="40">
+    </div>
+    <div class="header-inner">
+      <a class="home-link" href="../index.html">
+        <img src="../profile.webp" alt="Guillaume Goujon" class="profile-photo" width="44" height="44">
+      </a>
+      <div class="header-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="case-study">
+      <a class="back-link" href="../index.html">&larr; Back to all case studies</a>
+
+      <h1>Octopus Support Assistant</h1>
+
+      <section id="ask-the-assistant" class="advisor-widget">
+        <h2>Live demo</h2>
+        <p class="advisor-disclaimer">
+          I'm an independent, unofficial AI assistant &mdash; not affiliated with, endorsed by, or
+          operated by Octopus Energy, and I have no access to any real Octopus account. I only
+          answer from Octopus's own public help pages (with a link to the page used); anything
+          needing your actual account, a dispute or complaint, or a genuine gap in what I've found
+          gets redirected to Octopus's real channels instead. Please don't share personal or
+          account details &mdash; nothing typed here is stored beyond this conversation.
+        </p>
+        <div class="advisor-chat" id="advisor-chat" aria-live="polite"></div>
+        <form id="advisor-form" class="advisor-form">
+          <label for="advisor-input" class="sr-only">Your message</label>
+          <textarea id="advisor-input" rows="3" autocomplete="off" maxlength="1000" required
+                    placeholder="e.g. How do I submit a meter reading?"></textarea>
+          <button type="submit">Send</button>
+        </form>
+        <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
+      </section>
+    </article>
+  </main>
+
+  <script src="support-assistant-widget.js?v=1" defer></script>
+</body>
+</html>

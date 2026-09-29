@@ -52,9 +52,10 @@ def main(argv: list[str] | None = None) -> int:
 
     print(DISCLOSURE)
     history: list[dict[str, str]] = []
+    index_cache = core.CategoryIndexCache()  # reused across the whole session, not just one message
 
     def send(message: str) -> None:
-        response = core.handle_message(message, history, client=None)
+        response = core.handle_message(message, history, client=None, index_fetch=index_cache)
         history.append({"role": "user", "content": message})
         history.append({"role": "assistant", "content": response["text"]})
         print(json.dumps(response, indent=2) if args.json else render(response))

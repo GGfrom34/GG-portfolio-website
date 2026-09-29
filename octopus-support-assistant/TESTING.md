@@ -129,6 +129,16 @@ rationale: The customer asks a general informational question about how Octopus 
 
 — correctly unfazed by the injection, and reaching `generate_grounded_answer` this time. The result was still `REDIRECT`/`content_gap`: the model declined to answer "how the algorithm works internally" from general knowledge despite being explicitly told to, because nothing in the fetched reference material actually supported that level of detail. Logged to Jira as `SCRUM-13` (a legitimate gap — "how does Agile pricing work" is a real product question, however it was phrased) confirming the fails-closed design holds even under a direct, explicit instruction to ignore it.
 
+## A fourth bug, found during web-chat browser verification
+
+A follow-up session added `web_server.py`. While smoke-testing the live widget in a browser against the real backend, "How do I submit a meter reading?" came back as a `GROUNDED_ANSWER` (citing the real meter-reading article) instead of the `REDIRECT`/`account_specific` the spec requires — meter reading submission is explicitly one of the fixed account-specific topics, regardless of phrasing.
+
+**Root cause.** `CLASSIFY_SYSTEM_PROMPT` listed "submitting a meter reading" as an `account_specific` example, but the classifier read a "how do I..." framing as a request to *explain the general mechanism* (which the fetched article genuinely does) rather than as the fixed topic itself, and picked `general`.
+
+**Fix, in two steps.** First, made the category description explicit that a "how do I..." phrasing of a fixed topic still counts as `account_specific`, with a worked contrast against a genuinely general question — this alone did not change the model's behavior on repeated real calls. Second, added a short block of worked input→category examples (including this exact phrase) directly to the prompt — concrete examples proved far more effective than abstract prose at steering the classification, and fixed it consistently across five repeated real calls.
+
+**Regression note.** This is model-classification behavior, not deterministic dispatch logic, so it isn't (and can't be) covered by the offline `FakeAnthropicClient`-based test suite, which only proves `handle_message` routes each category correctly once classified — it can't prove the *real* model picks the right category for a given phrasing. Caught only because the browser smoke-test in `<verification_workflow>` exercised a real end-to-end message against the live model, which is exactly why that step exists rather than trusting the offline suite alone for a change like this.
+
 ## Known limitations (observed, not fixed)
 
 - **Single-level fetch depth.** Retrieval fetches only the top-matched article page(s), not pages *they* link to. A hub-style article (like the meter-reading one in scenario 4) can legitimately fail to ground an otherwise-covered topic. The fails-closed design means this produces an honest content-gap redirect rather than a wrong answer, but it does mean some real Octopus content is invisible to this tool.

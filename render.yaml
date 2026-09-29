@@ -12,3 +12,30 @@ services:
         sync: false
       - key: ALLOWED_ORIGIN
         sync: false
+
+  - type: web
+    name: octopus-support-assistant
+    runtime: python
+    plan: free
+    rootDir: octopus-support-assistant
+    buildCommand: pip install -r requirements-web.txt
+    startCommand: uvicorn web_server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGIN
+        sync: false
+      # Optional: enables live Jira content-gap logging in the deployed demo.
+      # If any is unset, core.jira_config_from_env() returns None and logging
+      # silently no-ops -- handle_message still works.
+      - key: JIRA_SITE_URL
+        sync: false
+      - key: JIRA_EMAIL
+        sync: false
+      - key: JIRA_API_TOKEN
+        sync: false
+      - key: JIRA_PROJECT_KEY
+        sync: false
+      - key: JIRA_SPRINT_ID
+        sync: false
