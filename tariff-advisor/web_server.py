@@ -415,6 +415,15 @@ def chat(req: ChatRequest, request: Request):
                         "content": json.dumps(content), "is_error": is_error,
                     })
                 history.append({"role": "user", "content": tool_results})
+        except anthropic.RateLimitError as exc:
+            # The SDK raises this both for genuine request-rate limiting and for an
+            # account/workspace credit or spend limit being exhausted -- indistinguishable from
+            # here, but both mean the same thing to a visitor: no budget available right now.
+            # Give them the same clear message as the app's own daily cap, rather than the
+            # generic catch-all below, which would wrongly read as a transient glitch worth
+            # retrying immediately.
+            log.warning("Anthropic rate/quota limit hit: %s", exc)
+            yield sse("text", "\n\n" + BUDGET_EXHAUSTED_MESSAGE)
         except Exception as exc:  # noqa: BLE001 - a public endpoint must never crash the stream, whatever the cause
             log.warning("Chat turn failed: %s: %s", type(exc).__name__, exc)
             yield sse("text", "\n\nSorry, something went wrong talking to the model. Please try again.")

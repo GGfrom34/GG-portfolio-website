@@ -282,6 +282,34 @@ class ChatToolLoopTests(unittest.TestCase):
         self.assertIn("something went wrong", text)
         self.assertEqual(events[-1][0], "done")
 
+    def test_anthropic_rate_limit_error_gets_the_budget_exhausted_message_not_the_generic_one(self):
+        """A RateLimitError covers both genuine rate limiting and an Anthropic account/workspace
+        credit or spend limit being hit -- either way, the visitor should see the same clear
+        "no budget right now" message as the app's own daily cap, not the generic catch-all."""
+        import httpx
+        import anthropic
+
+        class RaisingMessagesApi:
+            def stream(self, **kwargs):
+                request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+                response = httpx.Response(429, request=request)
+                raise anthropic.RateLimitError("rate limited", response=response, body=None)
+
+        client = FakeAnthropicClient([])
+        client.messages = RaisingMessagesApi()
+        patcher = mock.patch.object(web_server, "anthropic_client", client)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.set_budget()
+
+        events, status = run_stream(web_server.chat(web_server.ChatRequest(message="hi"), FakeRequest()))
+
+        self.assertEqual(status, 200)
+        text = "".join(data for event, data in events if event == "text")
+        self.assertIn(web_server.BUDGET_EXHAUSTED_MESSAGE, text)
+        self.assertNotIn("something went wrong", text)
+        self.assertEqual(events[-1][0], "done")
+
     def test_profile_error_from_a_bad_region_is_an_error_tool_result(self):
         self.set_client(
             (["Checking…"], FakeMessage([tool_use_block("t1", "recommend_tariff", {"region": "Z"})], "tool_use")),
