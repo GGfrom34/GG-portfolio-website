@@ -99,20 +99,28 @@ class FakeStreamContext:
 
 
 class FakeMessagesApi:
-    def __init__(self, turns):
-        """turns: list of (text_chunks, FakeMessage), consumed one per anthropic call."""
+    def __init__(self, turns, on_call=None):
+        """turns: list of (text_chunks, FakeMessage), consumed one per anthropic call.
+
+        on_call, if given, is invoked with the 1-based call number just before that call's
+        response is returned -- lets a test act (e.g. mark a session cancelled) at a precise point
+        partway through a multi-call turn, simulating a signal arriving while a call is in flight.
+        """
         self._turns = list(turns)
         self.calls = []
+        self._on_call = on_call
 
     def stream(self, **kwargs):
         self.calls.append(kwargs)
+        if self._on_call:
+            self._on_call(len(self.calls))
         text_chunks, final = self._turns.pop(0)
         return FakeStreamContext(text_chunks, final)
 
 
 class FakeAnthropicClient:
-    def __init__(self, turns):
-        self.messages = FakeMessagesApi(turns)
+    def __init__(self, turns, on_call=None):
+        self.messages = FakeMessagesApi(turns, on_call=on_call)
 
 
 def run_stream(response) -> tuple[list[tuple[str, dict]], int]:
@@ -143,6 +151,7 @@ class ChatToolLoopTests(unittest.TestCase):
             mock.patch.object(core, "_get_json", self.stub),
             mock.patch.object(web_server, "market_cache", core.MarketCache(fetch=fixed_time_fetch)),
             mock.patch.object(web_server, "sessions", type(web_server.sessions)()),
+            mock.patch.object(web_server, "cancelled_sessions", type(web_server.cancelled_sessions)()),
             # A fresh limiter per test: the module-level one is a singleton, and several tests in
             # this class call chat() with the same default IP, so a shared limiter would let earlier
             # tests exhaust later ones' quota.
@@ -155,8 +164,8 @@ class ChatToolLoopTests(unittest.TestCase):
         self.addCleanup(tmpdir.cleanup)
         self.budget_path = Path(tmpdir.name) / "budget.json"
 
-    def set_client(self, *turns):
-        client = FakeAnthropicClient(list(turns))
+    def set_client(self, *turns, on_call=None):
+        client = FakeAnthropicClient(list(turns), on_call=on_call)
         patcher = mock.patch.object(web_server, "anthropic_client", client)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -201,6 +210,32 @@ class ChatToolLoopTests(unittest.TestCase):
         self.assertFalse(result_block["is_error"])
         result_payload = json.loads(result_block["content"])
         self.assertIn("recommendations", result_payload)
+
+    def test_cancellation_stops_the_loop_before_its_next_anthropic_call(self):
+        """Regression test for the reported bug: clicking "New conversation" while a request is
+        in flight left the abandoned turn running server-side. Simulates the cancel signal
+        arriving while the first (tool_use) call is still "in flight" via the on_call hook, and
+        asserts the second call -- the one that would explain the recommendation -- never happens."""
+        session_id = "abandoned-session"
+
+        def cancel_after_first_call(call_number):
+            if call_number == 1:
+                web_server.mark_cancelled(session_id)
+
+        client = self.set_client(
+            (["Checking…"], FakeMessage([tool_use_block("t1", "recommend_tariff", {"region": "C"})], "tool_use")),
+            (["should never be reached"], FakeMessage([text_block("should never be reached")], "end_turn")),
+            on_call=cancel_after_first_call,
+        )
+        self.set_budget()
+
+        events, status = run_stream(web_server.chat(web_server.ChatRequest(message="hi", session_id=session_id), FakeRequest()))
+
+        self.assertEqual(status, 200)
+        self.assertEqual(len(client.messages.calls), 1)  # the second call never happened
+        text = "".join(data for event, data in events if event == "text")
+        self.assertNotIn("should never be reached", text)
+        self.assertEqual(events[-1][0], "done")  # still ends cleanly, no crash
 
     def test_assistant_history_omits_response_only_fields_the_api_rejects_on_replay(self):
         """Regression test: the real anthropic SDK's TextBlock/ToolUseBlock carry response-only
@@ -287,6 +322,27 @@ class ChatToolLoopTests(unittest.TestCase):
         self.assertEqual(response.status_code, 429)
         # a different IP still has its own share
         self.assertTrue(budget.can_afford("9.9.9.9", 1))
+
+
+@needs_web
+class CancellationTests(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(web_server, "cancelled_sessions", type(web_server.cancelled_sessions)())
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_mark_then_consume_returns_true_once(self):
+        web_server.mark_cancelled("s1")
+        self.assertTrue(web_server.consume_cancelled("s1"))
+        self.assertFalse(web_server.consume_cancelled("s1"))  # already consumed
+
+    def test_unmarked_session_is_not_cancelled(self):
+        self.assertFalse(web_server.consume_cancelled("never-marked"))
+
+    def test_cancel_endpoint_marks_the_session(self):
+        response = web_server.cancel(web_server.CancelRequest(session_id="s2"))
+        self.assertEqual(response, {"status": "ok"})
+        self.assertTrue(web_server.consume_cancelled("s2"))
 
 
 @needs_web

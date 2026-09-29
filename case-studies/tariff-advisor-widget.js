@@ -22,6 +22,7 @@
   if (!chatEl || !formEl || !inputEl) return; // widget markup not on this page
 
   let sending = false;
+  let currentAbortController = null;
 
   function addMessage(role, text) {
     const wrapper = document.createElement("div");
@@ -71,6 +72,21 @@
     }
   }
 
+  // web_server.py's get_session() already accepts and uses a client-supplied session_id verbatim
+  // for a brand-new conversation, so generating it here (rather than waiting for the backend to
+  // assign one) means a message always has a known session_id from the moment it's sent -- even
+  // its very first one. That matters for cancellation: without this, aborting a conversation's
+  // first-ever request would have nothing to tell /cancel to stop, since the id would otherwise
+  // only become known once the (now-abandoned) response's "done" event arrived.
+  function ensureSessionId() {
+    let id = getSessionId();
+    if (!id) {
+      id = crypto.randomUUID();
+      setSessionId(id);
+    }
+    return id;
+  }
+
   // Parses one or more "event: X\ndata: Y\n\n" blocks out of an SSE byte stream, tolerating a
   // block being split across two chunks (fetch's reader has no framing guarantees).
   function makeSseParser(onEvent) {
@@ -104,14 +120,22 @@
     const assistantEl = addMessage("assistant", "");
     setStatus("Thinking…");
 
+    currentAbortController = new AbortController();
+
     let response;
     try {
       response = await fetch(BACKEND_URL + "/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: getSessionId(), message: message }),
+        body: JSON.stringify({ session_id: ensureSessionId(), message: message }),
+        signal: currentAbortController.signal,
       });
     } catch (err) {
+      if (err.name === "AbortError") {
+        // Cancelled via "New conversation" -- that handler already reset the UI state; nothing
+        // more to do, and no error should be shown for a deliberate cancel.
+        return;
+      }
       setStatus(null);
       assistantEl.textContent = "Sorry, I couldn't reach the advisor service. Please try again shortly.";
       sending = false;
@@ -151,12 +175,18 @@
       }
     });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      parse(decoder.decode(value, { stream: true }));
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parse(decoder.decode(value, { stream: true }));
+      }
+    } catch (err) {
+      if (err.name === "AbortError") return; // cancelled mid-stream; reset handler already cleaned up
+      throw err;
     }
 
+    currentAbortController = null;
     sending = false;
     inputEl.disabled = false;
     inputEl.focus();
@@ -183,6 +213,31 @@
 
   if (resetEl) {
     resetEl.addEventListener("click", function () {
+      if (currentAbortController) {
+        currentAbortController.abort();
+        currentAbortController = null;
+      }
+      // Reset synchronously, right here -- don't wait on the aborted request's own async cleanup
+      // to re-enable the field, which is what left it stuck disabled for a few seconds before.
+      sending = false;
+      inputEl.disabled = false;
+      setStatus(null);
+
+      const abandonedSessionId = getSessionId();
+      if (abandonedSessionId) {
+        // Best-effort: tells the backend to stop the abandoned turn before its next Anthropic
+        // call too, not just the browser. Fire-and-forget -- the UI is already fixed regardless
+        // of whether this reaches the server.
+        fetch(BACKEND_URL + "/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: abandonedSessionId }),
+          keepalive: true,
+        }).catch(function () {
+          /* best-effort; nothing to do if this fails */
+        });
+      }
+
       clearSessionId();
       chatEl.innerHTML = "";
       addMessage("assistant", "New conversation started. What would you like to know about Octopus tariffs?");

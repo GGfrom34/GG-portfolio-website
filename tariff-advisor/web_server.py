@@ -288,6 +288,31 @@ def get_session(session_id: Optional[str]) -> tuple[str, list[dict[str, Any]]]:
         return new_id, sessions[new_id]
 
 
+# Lets a client (the "New conversation" button) tell an in-flight /chat stream to stop making
+# further Anthropic calls once the client has already walked away. Bounded the same way as
+# `sessions`, since a cancellation that's never consumed (e.g. the client resets when nothing was
+# actually in flight) would otherwise sit here forever.
+cancelled_sessions: "OrderedDict[str, None]" = OrderedDict()
+cancelled_sessions_lock = threading.Lock()
+
+
+def mark_cancelled(session_id: str) -> None:
+    with cancelled_sessions_lock:
+        cancelled_sessions[session_id] = None
+        cancelled_sessions.move_to_end(session_id)
+        while len(cancelled_sessions) > MAX_SESSIONS:
+            cancelled_sessions.popitem(last=False)
+
+
+def consume_cancelled(session_id: str) -> bool:
+    """True and clears the flag if this session was marked cancelled; False otherwise."""
+    with cancelled_sessions_lock:
+        if session_id in cancelled_sessions:
+            del cancelled_sessions[session_id]
+            return True
+        return False
+
+
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
@@ -308,12 +333,27 @@ class ChatRequest(BaseModel):
     message: str
 
 
+class CancelRequest(BaseModel):
+    session_id: str
+
+
 def sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.post("/cancel")
+def cancel(req: CancelRequest) -> dict[str, str]:
+    """Tells an in-flight /chat stream for this session to stop before its next Anthropic call.
+
+    Called by the "New conversation" button so an abandoned turn doesn't run (and spend tokens)
+    to completion after the visitor has walked away. Cheap in-memory op, no rate limit needed.
+    """
+    mark_cancelled(req.session_id)
     return {"status": "ok"}
 
 
@@ -341,6 +381,8 @@ def chat(req: ChatRequest, request: Request):
         try:
             while True:
                 turns += 1
+                if consume_cancelled(session_id):
+                    break
                 if turns > MAX_TURNS_PER_SESSION:
                     yield sse("text", "\n\n(This conversation has reached its step limit — please start a new one.)")
                     break
