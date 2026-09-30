@@ -91,11 +91,7 @@
           real decision about what "logging a gap" should even mean. Account-specific and dispute
           redirects are permanent boundaries, not failures to fix, so they're never logged anywhere. A
           genuine content gap &mdash; a real Octopus question the fetched pages don't cover &mdash;
-          gets redacted and filed as a Jira issue for review. I originally asked for a new Jira project
-          for that; partway through I changed my mind and had it redirected into the existing PRD-to-Jira
-          project's own dedicated escalation sprint instead, so all of this tool's write activity in
-          Jira stays visibly scoped to one place rather than spawning a project nobody would think to
-          check.
+          gets redacted and filed as a Jira issue for review.
         </p>
         <p>
           For the web chat, I asked for the same real token-usage guardrails the tariff advisor has
@@ -126,27 +122,14 @@
             it would just spam the tracker with noise.
           </li>
           <li>
-            <strong>I redirected the Jira integration mid-build.</strong> The original plan was a new
-            Jira project; once Claude Code found there was no way to create one through the connected
-            Atlassian tools, I decided against a new project entirely and pointed it at the existing
-            shared project's own escalation sprint instead.
-          </li>
-          <li>
             <strong>I made every credential and account call myself.</strong> Generated the Anthropic
-            API key &mdash; twice, after the first one was silently blocked at Cloudflare's edge, which
-            took real debugging to diagnose as a leaked-credential block rather than a simple bad key
-            &mdash; created the Jira API token, and made every Render deployment decision.
+            API key, created the Jira API token, and made every Render deployment decision.
           </li>
           <li>
             <strong>I asked for live verification, not a green test suite alone.</strong> Once
             deployed, I had Claude Code drive the actual production widget in a real browser, which is
             what caught a genuine classification bug the offline test suite structurally couldn't have:
             a real phrasing the live model handled wrong.
-          </li>
-          <li>
-            <strong>I scoped this page deliberately.</strong> I chose to keep this session to the
-            working demo and ask for this write-up as a separate, later pass, rather than have
-            everything land in one sitting.
           </li>
         </ul>
       </section>
@@ -185,13 +168,7 @@
           </li>
           <li>
             Three real bugs found and fixed through actual testing rather than left to be discovered
-            later &mdash; a regex that could leak part of a meter reference instead of fully redacting
-            it, a dependency-injection gap that would have made "offline" tests silently hit the real
-            network, and a Jira sprint-verification race condition &mdash; each locked in with its own
-            regression test. A fourth, found live in the browser against the real deployed model: a
-            classification prompt that let "how do I submit a meter reading" slip through as answerable
-            instead of redirected, fixed with concrete worked examples once abstract prompt wording
-            alone didn't hold.
+            later, each locked in with its own regression test.
           </li>
         </ul>
       </section>
@@ -213,6 +190,13 @@
              alt="Live demo chat showing a user message asking whether two electric vehicles, a Renault and a Polestar, can both be connected to Intelligent Octopus Go. The assistant answers that this isn't possible because Renault and Polestar both fall into the 'Limited' (Group 3) compatibility category, and Group 3 cars can't be combined with each other, then suggests pairing one of them with a Group 1 or Group 2 car instead, citing octopus.energy/help-and-faqs/articles/iogo-multicar/ as the source."
              width="627" height="802" loading="lazy">
         <figcaption>A genuinely niche question &mdash; multi-EV compatibility groups for Intelligent Octopus Go &mdash; answered correctly and grounded in the real help article, not general knowledge.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/octopus-support-assistant-jira-backlog.png"
+             alt="The real Jira backlog for Project GG, showing the 'Escalation - support agent' sprint with four content-gap work items (SCRUM-11 through SCRUM-14), each titled 'Content gap:' followed by the customer's question with any personal details replaced by redaction placeholders like [REDACTED-NAME/ADDRESS], [REDACTED-EMAIL], and [REDACTED-PHONE]."
+             width="1552" height="441" loading="lazy">
+        <figcaption>The real Jira backlog after several live test conversations &mdash; every content-gap ticket carries only the redacted question, never a name, email, or phone number.</figcaption>
       </figure>
     </article>
   </main>
