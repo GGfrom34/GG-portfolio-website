@@ -48,6 +48,172 @@
         </form>
         <button type="button" id="advisor-reset" class="advisor-reset">New conversation</button>
       </section>
+
+      <section id="problem">
+        <h2>Problem</h2>
+        <p>
+          Most "AI customer support" demos fail in one of two directions: they fabricate a
+          plausible-sounding answer when they don't actually know something, or they quietly step
+          outside what they're actually allowed to do. Both are easy to hide in a demo and expensive
+          in production. I wanted to build the opposite &mdash; an assistant that only ever answers
+          from content it can point to, and that treats certain topics, anything needing a real
+          account or a genuine dispute, as permanent boundaries to redirect around rather than
+          obstacles to talk its way past.
+        </p>
+        <p>
+          Octopus Energy customer support was the right test case because it has exactly the shape
+          that makes this hard to fake: a large public help-page library worth genuinely grounding
+          answers in, real account-specific actions (balance, meter readings, switching) that a demo
+          has no business touching, and a way to actually measure whether a boundary holds under
+          pressure &mdash; including a customer trying to talk the assistant out of its own rules.
+        </p>
+      </section>
+
+      <section id="approach">
+        <h2>Approach</h2>
+        <p>
+          Like the tariff advisor, this is a dependency-light Python core (<code>core.py</code>) with
+          zero knowledge of any interface, so the same logic sits behind a CLI and this public web
+          chat without duplication. The design problem here is different, though: instead of one
+          recommendation engine, <code>handle_message()</code> has to make a judgment call on every
+          single message &mdash; can the fetched Octopus help pages actually answer this, does it
+          need a real account, is it a dispute, or is it just off-topic? I made that classification an
+          explicit, separate step with its own forced tool-use call, specifically so it can't be left
+          for the answer-drafting prompt to decide implicitly halfway through generating a reply.
+          Grounding is enforced the same structural way: the model can only cite a URL that was
+          actually fetched this run, checked against the real fetch list afterwards, so a hallucinated
+          citation isn't just discouraged by the prompt &mdash; it's impossible.
+        </p>
+        <p>
+          The parts that don't show up in a first cut: a two-pass redaction pipeline (patterns for
+          emails, phone numbers, postcodes and reference numbers, then a small model call for
+          identifying detail written as prose) that runs on anything before it reaches a log; and a
+          real decision about what "logging a gap" should even mean. Account-specific and dispute
+          redirects are permanent boundaries, not failures to fix, so they're never logged anywhere. A
+          genuine content gap &mdash; a real Octopus question the fetched pages don't cover &mdash;
+          gets redacted and filed as a Jira issue for review. I originally asked for a new Jira project
+          for that; partway through I changed my mind and had it redirected into the existing PRD-to-Jira
+          project's own dedicated escalation sprint instead, so all of this tool's write activity in
+          Jira stays visibly scoped to one place rather than spawning a project nobody would think to
+          check.
+        </p>
+        <p>
+          For the web chat, I asked for the same real token-usage guardrails the tariff advisor has
+          &mdash; a persisted daily budget, both global and per-visitor, plus a rate limit &mdash; so
+          visitors testing the demo couldn't run up real spend. <code>core.handle_message()</code>
+          doesn't stream text the way the tariff advisor's tool-use loop does (it's a single opaque
+          call that can make up to three model calls internally), so instead of token-by-token
+          streaming, the backend reports real usage back through a callback and reconciles it against
+          the budget after every request, and the widget shows one "thinking" status while the reply
+          is generated rather than watching words appear.
+        </p>
+      </section>
+
+      <section id="approach-steps">
+        <h2>Approach &mdash; step by step</h2>
+        <ul>
+          <li>
+            <strong>I wrote the full functional spec myself before any code, and asked for Plan Mode
+            twice.</strong> Exactly which topics redirect, how classification should work, what
+            redaction has to catch, where content gaps get logged &mdash; all specified up front, then
+            scoped in Plan Mode and approved before a file was touched, once for the core assistant and
+            again for the web chat that followed.
+          </li>
+          <li>
+            <strong>I resolved the one real ambiguity my own spec left open.</strong> Should an
+            off-topic message (not a genuine Octopus question) get logged as a "content gap" the same
+            as a real one? I decided no &mdash; it isn't a gap in Octopus's help content, and logging
+            it would just spam the tracker with noise.
+          </li>
+          <li>
+            <strong>I redirected the Jira integration mid-build.</strong> The original plan was a new
+            Jira project; once Claude Code found there was no way to create one through the connected
+            Atlassian tools, I decided against a new project entirely and pointed it at the existing
+            shared project's own escalation sprint instead.
+          </li>
+          <li>
+            <strong>I made every credential and account call myself.</strong> Generated the Anthropic
+            API key &mdash; twice, after the first one was silently blocked at Cloudflare's edge, which
+            took real debugging to diagnose as a leaked-credential block rather than a simple bad key
+            &mdash; created the Jira API token, and made every Render deployment decision.
+          </li>
+          <li>
+            <strong>I asked for live verification, not a green test suite alone.</strong> Once
+            deployed, I had Claude Code drive the actual production widget in a real browser, which is
+            what caught a genuine classification bug the offline test suite structurally couldn't have:
+            a real phrasing the live model handled wrong.
+          </li>
+          <li>
+            <strong>I scoped this page deliberately.</strong> I chose to keep this session to the
+            working demo and ask for this write-up as a separate, later pass, rather than have
+            everything land in one sitting.
+          </li>
+        </ul>
+      </section>
+
+      <section id="capabilities">
+        <h2>Claude Code capabilities used</h2>
+        <ul>
+          <li><strong>Plan Mode</strong> &mdash; scoped twice: once for the classification/grounding/redaction/Jira design, once again for the web chat backend, both approved before any file was touched.</li>
+          <li><strong>The in-app browser</strong> &mdash; used before writing any fetch/parse code to read the real octopus.energy help pages and confirm the actual URL structure and server-rendered HTML rather than assuming it; used again after deployment to drive the real, live widget end-to-end and catch a classification bug that only showed up talking to the real model.</li>
+          <li><strong>AskUserQuestion</strong> &mdash; surfaced the off-topic-logging ambiguity, the Jira-project blocker, and the case-study page's scope as explicit decisions rather than guessing at any of them.</li>
+          <li><strong>Subagents (Explore, Plan)</strong> &mdash; researched the sibling tariff-advisor project's conventions and drafted the retrieval/classification/redaction architecture for review before any implementation began.</li>
+          <li><strong>Direct debugging with real tools</strong> &mdash; diagnosed a Cloudflare-level credential block by comparing it against a deliberately invalid key's different failure mode, traced a "Jira returned HTML instead of JSON" bug to a misconfigured site URL, and found a Jira sprint-verification race condition by checking the issue directly against the Jira API rather than assuming the code was wrong.</li>
+          <li><strong>Atlassian MCP tools</strong> &mdash; queried the real Jira project's boards, sprints and issue-type schema directly to build <code>core.py</code>'s REST integration against real constraints instead of guesses, and verified, issue by issue, that live-logged content gaps were correctly redacted and actually landed in the right sprint.</li>
+        </ul>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/octopus-support-assistant-architecture.svg"
+             alt="Architecture diagram of the live web chat demo: you ask a question in the chat widget on this page, which calls a web chat server hosted on Render. The server enforces guardrails and calls core.py, which always classifies the message first, then either fetches Octopus Energy's public help pages and asks Claude to draft a grounded answer, or returns a fixed redirect for account-specific or dispute topics. When neither applies, that is a genuine content gap and the redacted question is logged to Jira."
+             width="760" height="440" loading="lazy">
+        <figcaption>How the live chat demo above actually works, end to end.</figcaption>
+      </figure>
+
+      <section id="outcome">
+        <h2>Outcome</h2>
+        <ul>
+          <li>
+            A working, publicly hosted support agent embedded live on this page, sharing the exact
+            same core logic across the CLI and the web chat &mdash; no classification, grounding, or
+            redaction logic duplicated between them.
+          </li>
+          <li>
+            A grounding guarantee that's structural, not just prompted: every citation the assistant
+            gives is checked against the pages it actually fetched that run, so a hallucinated URL is
+            impossible, not just discouraged.
+          </li>
+          <li>
+            Three real bugs found and fixed through actual testing rather than left to be discovered
+            later &mdash; a regex that could leak part of a meter reference instead of fully redacting
+            it, a dependency-injection gap that would have made "offline" tests silently hit the real
+            network, and a Jira sprint-verification race condition &mdash; each locked in with its own
+            regression test. A fourth, found live in the browser against the real deployed model: a
+            classification prompt that let "how do I submit a meter reading" slip through as answerable
+            instead of redirected, fixed with concrete worked examples once abstract prompt wording
+            alone didn't hold.
+          </li>
+        </ul>
+      </section>
+
+      <section id="repo">
+        <h2>Repository</h2>
+        <p><a href="https://github.com/GGfrom34/GG-portfolio-website/tree/main/octopus-support-assistant" target="_blank" rel="noopener noreferrer">View the GitHub repo</a></p>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/octopus-support-assistant-account-specific-redirect.png"
+             alt="Live demo chat showing a user message: 'I'm an Octopus customer with an active contract and I'm moving home in 2 months, what should I do?' The assistant replies with the fixed redirect message: it has no access to any real Octopus account, billing, or metering systems, and for anything involving the customer's actual account they should use the official Octopus Energy app or website, or contact Octopus Energy support directly."
+             width="645" height="731" loading="lazy">
+        <figcaption>Moving home ties directly into the customer's own contract, so it's treated as account-specific and redirected &mdash; the same fixed message as every other boundary case.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/octopus-support-assistant-multi-ev-grounded-answer.png"
+             alt="Live demo chat showing a user message asking whether two electric vehicles, a Renault and a Polestar, can both be connected to Intelligent Octopus Go. The assistant answers that this isn't possible because Renault and Polestar both fall into the 'Limited' (Group 3) compatibility category, and Group 3 cars can't be combined with each other, then suggests pairing one of them with a Group 1 or Group 2 car instead, citing octopus.energy/help-and-faqs/articles/iogo-multicar/ as the source."
+             width="627" height="802" loading="lazy">
+        <figcaption>A genuinely niche question &mdash; multi-EV compatibility groups for Intelligent Octopus Go &mdash; answered correctly and grounded in the real help article, not general knowledge.</figcaption>
+      </figure>
     </article>
   </main>
 
