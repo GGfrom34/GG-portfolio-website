@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -32,75 +32,34 @@
       <section id="problem">
         <h2>Problem</h2>
         <p>
-          I needed a portfolio that argues for itself: something a senior PM actually built by
-          directing Claude Code and AI agents, not a templated site-builder export. That ruled out
-          frameworks and page builders in favour of plain HTML/CSS/JS, one repo, and one deploy
-          target &mdash; GitHub Pages &mdash; reviewable one change at a time like real software,
-          rather than a single wall of generated markup nobody ever looks at again.
-        </p>
-        <p>
-          The catch was I started from an empty folder with no Git installed, no GitHub CLI, and no
-          existing repo conventions to follow. Every later request &mdash; a link change, a rename,
-          a favicon, a whole new case study &mdash; needed to land through the same disciplined path:
-          a branch, a real commit message, a pull request, a merge, and a clean-up, not a shortcut
-          taken because it was "only two lines."
+          I wanted a portfolio that proves its own point: that a product manager can direct AI to
+          build real, working software. So instead of using a template or a website builder, I built
+          the site with Claude Code, Anthropic's AI coding assistant, and kept a clear record of how
+          it came together.
         </p>
       </section>
 
       <section id="approach">
         <h2>Approach</h2>
         <p>
-          I started by asking for the scaffold itself: a home page with a one-line pitch, two
-          case-study placeholders, a shared stylesheet, and header/footer link placeholders for CV
-          and LinkedIn &mdash; kept deliberately plain over elaborate. From there I drove every
-          change as its own small, reviewed unit: rename this case study, change these two links,
-          add a favicon, backfill this content &mdash; each one previewed in an actual browser at
-          desktop and mobile widths before I ever saw it, then pushed through a branch &rarr; PR
-          &rarr; merge cycle rather than committed straight to <code>main</code>.
+          I started with a simple brief: a home page, a couple of case study pages, and a clean
+          design that loads fast. From there I worked one small change at a time, and every change
+          was previewed in a real browser, on desktop and mobile, before it went live.
         </p>
-        <p>
-          The environment fought back more than the content did. Git wasn't installed, so I got a
-          walkthrough for the <code>winget</code> install and a PATH fix, then had to work around a
-          shell process that couldn't see the newly installed <code>git.exe</code> until every
-          command re-pointed at its full path. The GitHub CLI had the same problem &mdash; install
-          it, hit the missing PATH again, and only after <code>gh auth login</code> could pull
-          requests open automatically. Even then, a multi-line PR body broke on PowerShell's argument
-          quoting, which needed a switch to <code>--body-file</code> to fix cleanly.
-        </p>
-      </section>
-
-      <section id="approach-steps">
-        <h2>Approach &mdash; step by step</h2>
         <ul>
           <li>
-            <strong>I set the workflow standard, and Claude Code held it for the rest of the
-            session.</strong> Once I approved the first branch &rarr; PR &rarr; merge cycle for a
-            small link change, Claude Code kept using it for every subsequent change without being
-            asked again, including checking with me before every push and every merge.
+            <strong>I set the standard for how changes ship.</strong> Every update was previewed
+            first, then approved by me before it was published.
           </li>
           <li>
-            <strong>I made every account and tooling call myself.</strong> Installing Git and the
-            GitHub CLI, running <code>gh auth login</code> in my own terminal, and approving each
-            push and merge were mine to do; Claude Code diagnosed the underlying PATH and quoting
-            problems and told me exactly what to run.
+            <strong>I chose between options rather than accepting a default.</strong> For the
+            site's icon, Claude Code designed five different concepts side by side, and I picked the
+            one I liked.
           </li>
           <li>
-            <strong>I chose between the options it generated, rather than getting one default.</strong>
-            Claude Code designed five distinct "GG" favicon concepts &mdash; a circle badge, a hex
-            circuit, a duotone tile, a circuit chip, and a minimal wordmark &mdash; and rendered them
-            together for a side-by-side comparison. I picked the hex-circuit option, and only that
-            one was wired into the site.
-          </li>
-          <li>
-            <strong>I asked for verification, not just claims.</strong> Every visual change was
-            checked by starting a local preview server and taking real screenshots at desktop and
-            mobile widths, not accepted as "should work" from reading the code alone.
-          </li>
-          <li>
-            <strong>I kept unrelated work out of my commits.</strong> When another session's work
-            (the Tariff Advisor backend) landed in the same working directory, Claude Code staged and
-            committed only the files relevant to the task at hand rather than sweeping everything in
-            with a blanket <code>git add -A</code>.
+            <strong>I kept the decisions in my hands.</strong> Claude Code did the building and
+            fixed the setup problems that came up; I decided what the pages said and when something
+            was ready to go live.
           </li>
         </ul>
       </section>
@@ -108,35 +67,20 @@
       <section id="capabilities">
         <h2>Claude Code capabilities used</h2>
         <ul>
-          <li><strong>File scaffolding and iterative editing</strong> &mdash; generated the initial HTML/CSS/JS structure, then made every follow-up change as small targeted edits rather than regenerating whole files.</li>
-          <li><strong>The in-app browser</strong> &mdash; previewed every visual change against a real local server, at desktop and mobile widths, before calling it done, and screenshotted the result to confirm the favicon actually showed in the browser tab.</li>
-          <li><strong>Generated visual concepts</strong> &mdash; designed and rendered five distinct favicon options inline for a side-by-side comparison, rather than describing them in words.</li>
-          <li><strong>Git and GitHub CLI operations</strong> &mdash; initialised the repo, and ran every branch, commit, push, pull request, and merge for the session once the workflow was approved.</li>
-          <li><strong>Diagnosing environment issues rather than guessing</strong> &mdash; traced a missing <code>git</code>/<code>gh</code> command to a stale shell process rather than a bad install, and a broken pull-request body to PowerShell's argument quoting rather than the GitHub CLI itself.</li>
+          <li><strong>Building and editing pages</strong> &mdash; creating the site, then making every later change as a small, targeted edit.</li>
+          <li><strong>Previewing in a real browser</strong> &mdash; checking each change on desktop and phone sizes before it went live.</li>
+          <li><strong>Generating design options</strong> &mdash; producing the five icon concepts for me to compare.</li>
+          <li><strong>Publishing changes safely</strong> &mdash; recording every update so it could be reviewed and, if needed, undone.</li>
+          <li><strong>Troubleshooting</strong> &mdash; working out what was going wrong during setup rather than guessing.</li>
         </ul>
       </section>
 
       <section id="outcome">
         <h2>Outcome</h2>
         <ul>
-          <li>
-            A live, plain HTML/CSS/JS portfolio at
-            <a href="https://ggfrom34.github.io/GG-portfolio-website/" target="_blank" rel="noopener noreferrer">ggfrom34.github.io/GG-portfolio-website</a>,
-            deployed via GitHub Pages with no build step and no framework.
-          </li>
-          <li>
-            Every change since the initial scaffold &mdash; link edits, a case-study rename, a
-            favicon, this very case study &mdash; shipped through its own reviewed pull request,
-            merged deliberately rather than committed straight to <code>main</code>.
-          </li>
-          <li>
-            A consistent visual identity: a "GG" hex-circuit favicon reused as a centred logo on
-            every page, matching the site's existing accent colour.
-          </li>
-          <li>
-            A working template for future changes &mdash; branch, preview in a real browser, PR,
-            merge, clean up &mdash; proven across half a dozen real changes, not just described.
-          </li>
+          <li>A live portfolio built end to end with Claude Code, with no templates and no website builder.</li>
+          <li>Every change reviewed and approved before it went live, leaving a clear record of how the site evolved.</li>
+          <li>A site that has grown from two placeholder pages to five case studies, using the same simple process each time.</li>
         </ul>
       </section>
 
