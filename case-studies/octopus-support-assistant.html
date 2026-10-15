@@ -72,36 +72,33 @@
       <section id="approach">
         <h2>Approach</h2>
         <p>
-          Like the tariff advisor, this is a dependency-light Python core (<code>core.py</code>) with
-          zero knowledge of any interface, so the same logic sits behind a CLI and this public web
-          chat without duplication. The design problem here is different, though: instead of one
-          recommendation engine, <code>handle_message()</code> has to make a judgment call on every
-          single message &mdash; can the fetched Octopus help pages actually answer this, does it
-          need a real account, is it a dispute, or is it just off-topic? I made that classification an
-          explicit, separate step with its own forced tool-use call, specifically so it can't be left
-          for the answer-drafting prompt to decide implicitly halfway through generating a reply.
-          Grounding is enforced the same structural way: the model can only cite a URL that was
-          actually fetched this run, checked against the real fetch list afterwards, so a hallucinated
-          citation isn't just discouraged by the prompt &mdash; it's impossible.
+          I wanted to structurally ensure the advisor agent stays within guardrails to avoid
+          hallucination or answering questions outside the allowed scope. This led me to make two
+          conscious design decisions:
+        </p>
+        <ul>
+          <li>
+            The advisor must make a judgment call on every single message it receives from a human:
+            can the fetched Octopus help pages actually answer this question, does it require access
+            to a real customer account, is it a dispute, or is it just off-topic? I made that
+            classification an explicit, separate step with its own forced tool-use call.
+          </li>
+          <li>
+            References within the agent's answers are also enforced in a structural way: the model can
+            only cite a URL that was actually fetched this run, checked against the real fetch list
+            afterwards, so a hallucinated citation isn't just discouraged by the prompt &mdash; it's
+            impossible.
+          </li>
+        </ul>
+        <p>
+          I also wanted a way to track relevant support questions that the agent failed to answer due
+          to a content gap in the Octopus knowledge base. Every time this scenario occurs, a ticket is
+          logged in a dedicated Jira sprint, for me to review in my own time. The content of this
+          ticket is intentionally redacted, to respect GDPR guidelines.
         </p>
         <p>
-          The parts that don't show up in a first cut: a two-pass redaction pipeline (patterns for
-          emails, phone numbers, postcodes and reference numbers, then a small model call for
-          identifying detail written as prose) that runs on anything before it reaches a log; and a
-          real decision about what "logging a gap" should even mean. Account-specific and dispute
-          redirects are permanent boundaries, not failures to fix, so they're never logged anywhere. A
-          genuine content gap &mdash; a real Octopus question the fetched pages don't cover &mdash;
-          gets redacted and filed as a Jira issue for review.
-        </p>
-        <p>
-          For the web chat, I asked for the same real token-usage guardrails the tariff advisor has
-          &mdash; a persisted daily budget, both global and per-visitor, plus a rate limit &mdash; so
-          visitors testing the demo couldn't run up real spend. <code>core.handle_message()</code>
-          doesn't stream text the way the tariff advisor's tool-use loop does (it's a single opaque
-          call that can make up to three model calls internally), so instead of token-by-token
-          streaming, the backend reports real usage back through a callback and reconciles it against
-          the budget after every request, and the widget shows one "thinking" status while the reply
-          is generated rather than watching words appear.
+          Finally, I imposed token-usage guardrails, so that visitors testing the demo couldn't run up
+          excessive spend on my personal Claude account.
         </p>
       </section>
 
