@@ -139,9 +139,7 @@
         <ul>
           <li><strong>Plan Mode</strong> &mdash; scoped twice: once for the classification/grounding/redaction/Jira design, once again for the web chat backend, both approved before any file was touched.</li>
           <li><strong>The in-app browser</strong> &mdash; used before writing any fetch/parse code to read the real octopus.energy help pages and confirm the actual URL structure and server-rendered HTML rather than assuming it; used again after deployment to drive the real, live widget end-to-end and catch a classification bug that only showed up talking to the real model.</li>
-          <li><strong>AskUserQuestion</strong> &mdash; surfaced the off-topic-logging ambiguity, the Jira-project blocker, and the case-study page's scope as explicit decisions rather than guessing at any of them.</li>
-          <li><strong>Subagents (Explore, Plan)</strong> &mdash; researched the sibling tariff-advisor project's conventions and drafted the retrieval/classification/redaction architecture for review before any implementation began.</li>
-          <li><strong>Direct debugging with real tools</strong> &mdash; diagnosed a Cloudflare-level credential block by comparing it against a deliberately invalid key's different failure mode, traced a "Jira returned HTML instead of JSON" bug to a misconfigured site URL, and found a Jira sprint-verification race condition by checking the issue directly against the Jira API rather than assuming the code was wrong.</li>
+          <li><strong>Direct debugging with real tools</strong> &mdash; tracked down three separate live issues (a blocked API key, a misconfigured Jira setting, a timing bug) by testing against the real services directly rather than guessing at the cause.</li>
           <li><strong>Atlassian MCP tools</strong> &mdash; queried the real Jira project's boards, sprints and issue-type schema directly to build <code>core.py</code>'s REST integration against real constraints instead of guesses, and verified, issue by issue, that live-logged content gaps were correctly redacted and actually landed in the right sprint.</li>
         </ul>
       </section>
