@@ -32,57 +32,62 @@
       <section id="problem">
         <h2>Problem</h2>
         <p>
-          I wanted to stay current on two fast-moving markets &mdash; AI dev tools and enterprise AI
-          agents &mdash; without manually scanning news for either every week. That's a research task,
-          which on its own just means pointing an agent at the web. The harder problem is that a
-          briefing exists specifically to make checkable claims: "pricing changed," "a new feature
-          shipped." A research agent generating those from a web search carries a real fabrication
-          risk on exactly the statements the briefing is supposed to get right, and a wrong one is
-          worse than no briefing at all if it's presented with the same confidence as a correct one.
+          I wanted to stay current on two fast-moving markets: AI dev tools and enterprise AI
+          agents. I decided to build an agentic workflow that creates a weekly briefing for each
+          market and emails it to me. That's a research task, which on its own just requires
+          pointing an agent at the web. However, I was conscious of fabrication risk, as an
+          incorrect briefing is worse than no briefing at all.
         </p>
-        <p>
-          So the brief had to do more than summarise search results. It had to report genuine
-          week-over-week change rather than restating the status quo, back every factual claim with a
-          source, and refuse to present itself as finished when it couldn't clear its own bar &mdash;
-          all without me reading a draft every Wednesday morning to catch the difference.
-        </p>
+        <p>To be useful, the brief had to:</p>
+        <ul>
+          <li>report genuine week-over-week change rather than restating the status quo</li>
+          <li>back every factual claim with a source</li>
+          <li>clear an independently set quality bar</li>
+        </ul>
       </section>
 
       <section id="approach">
         <h2>Approach</h2>
         <p>
-          This one runs as a Cowork scheduled task, not a local Claude Code CLI script like my other
-          case studies &mdash; the same design discipline (bounded steps, scoped agents, a hard gate
-          before anything ships) applied to a different part of the Claude platform, one built for
-          unattended, recurring execution rather than an interactive session at my keyboard.
+          This agentic workflow runs as a Cowork scheduled task, not a local Claude Code CLI script.
+          This allows for unattended weekly execution rather than a manually triggered workflow when
+          I'm at my keyboard.
         </p>
         <p>
-          I built it as a bounded, hard-gated pipeline, run separately per industry. A draft subagent
-          researches and writes the brief with every claim sourced; a separate critic subagent with no
-          memory of the drafting reviews it; the draft agent gets exactly one bounded revision round,
-          not an open-ended loop; and a second, stricter critic pass acts as a hard verification gate
-          &mdash; it doesn't just re-read the text, it independently re-fetches all three source links
-          to confirm they're actually live and show full article text rather than a paywall, and
-          confirms each claim's source genuinely supports it. Only the top-level orchestrating
-          session, never either subagent, is allowed to write to Drive or send email, and it does so
-          strictly on that verdict. The whole pipeline is packaged as a saved Skill, invoked by a
-          Cowork scheduled task every Wednesday at 5:58am London time, fully unattended.
+          I applied the same design discipline as in my other case studies, building it as a
+          bounded, hard-gated pipeline that runs separately for each industry.
         </p>
+        <p>The workflow was designed as follows:</p>
+        <ul>
+          <li>A draft subagent researches and writes the brief, with every claim sourced</li>
+          <li>A separate critic subagent, with no memory of the drafting, reviews it</li>
+          <li>The draft subagent gets exactly one bounded revision round, not an open-ended loop, in order to control token utilisation</li>
+          <li>A second, stricter critic pass acts as a hard verification gate</li>
+          <li>
+            The top-level orchestrating agent, not the subagents, then creates the briefing
+            documents in a dedicated Drive folder and emails me the Drive links
+            <ul>
+              <li>If the verification gate returns PASS, the document is clearly labelled FINAL</li>
+              <li>If the verification gate returns FAIL, the document is clearly labelled DRAFT, with a description of the claims that could not be verified, so a shaky draft is never quietly presented as finished</li>
+            </ul>
+          </li>
+          <li>The whole pipeline is packaged as a saved Skill, invoked by a Cowork scheduled task every Wednesday at 5:58am London time, fully unattended</li>
+        </ul>
       </section>
 
       <section id="approach-steps">
         <h2>Approach &mdash; step by step</h2>
         <ul>
           <li>
-            <strong>I gated the pipeline on real change, not a blind rerun.</strong> The first step is
-            always looking up last week's brief for that industry in Google Drive, so the output
+            <strong>I gated the pipeline on real change, not a blind rerun.</strong> The first step
+            is always looking up last week's brief for that industry in Google Drive, so the output
             reports genuine week-over-week change instead of restating whatever's still true.
           </li>
           <li>
             <strong>I separated drafting from verification completely.</strong> The draft subagent
             researches pricing changes, new product or feature announcements, and funding/M&amp;A
-            activity, plus a short synthesis line &mdash; and every factual claim it writes carries an
-            inline source link, not just a general "sources" list at the end.
+            activity, plus a short synthesis line. Every factual claim it writes carries an inline
+            source link, not just a general "sources" list at the end.
           </li>
           <li>
             <strong>I gave the critic no memory of the drafting.</strong> The critic subagent is a
@@ -90,23 +95,21 @@
             what counts as sufficiently sourced.
           </li>
           <li>
-            <strong>I bounded the revision to exactly one round.</strong> The draft agent gets one
-            chance to address the critic's issues &mdash; not an open-ended back-and-forth that could
-            loop indefinitely on a task nobody's watching run.
+            <strong>I bounded the revision to exactly one round.</strong> The draft subagent gets one
+            chance to address the critic's issues, not an open-ended back-and-forth that could loop
+            indefinitely on a task nobody's watching run.
           </li>
           <li>
             <strong>I made the second critic pass an actual verification gate, not another opinion.</strong>
-            It confirms every issue from the first pass was resolved, independently re-fetches all
-            three source links to confirm they're live and show full article text rather than a
-            paywall, and confirms each pricing/feature claim's source actually supports it &mdash; then
-            returns a strict PASS or FAIL, nothing softer.
+            It confirms every issue from the first pass was resolved and independently re-fetches all
+            three source links to check they're live and show full article text rather than a
+            paywall (a best-effort check, not a guarantee). It also confirms each pricing/feature
+            claim's source actually supports it, then returns a strict PASS or FAIL, nothing softer.
           </li>
           <li>
-            <strong>I kept write access in exactly one place.</strong> Neither subagent can touch Drive
-            or Gmail; only the orchestrating session can, and only after the verdict. PASS creates a
-            Doc titled "FINAL - [industry] Weekly Briefing - [date]" and sends a "ready" email. FAIL
-            creates a Doc titled "DRAFT - ..." instead and sends an email explaining exactly why, so a
-            shaky draft is never quietly presented as finished.
+            <strong>I kept write access in exactly one place.</strong> Only the orchestrating agent
+            touches Drive or Gmail, and only after the verdict; the subagents are only ever asked to
+            produce text.
           </li>
         </ul>
       </section>
@@ -116,9 +119,9 @@
         <ul>
           <li><strong>Cowork scheduled tasks</strong> &mdash; a cron-based trigger runs the whole pipeline unattended every Wednesday at 5:58am London time, with no session open on my end.</li>
           <li><strong>A saved Skill</strong> &mdash; the multi-step, multi-agent pipeline is packaged as a single Skill the scheduled task invokes, rather than a one-off prompt.</li>
-          <li><strong>Subagents scoped by task, not just by technical restriction</strong> &mdash; the drafting and critique agents are only ever asked to produce text, so the ability to write to Drive or Gmail stays concentrated in exactly one place.</li>
-          <li><strong>An explicit automated verification gate</strong> &mdash; a second, stricter critic pass decides between two output states (PASS/FAIL) with independent source re-verification, instead of a single agent self-certifying its own draft.</li>
-          <li><strong>Native Google Drive and Gmail connectors</strong> &mdash; used only by the orchestrating session, for the Drive diff lookup, the Doc creation, and the outcome email.</li>
+          <li><strong>Two subagents with clear scopes</strong> &mdash; the drafting and critic agents are only ever asked to produce text, so Drive and Gmail access stays concentrated in exactly one place.</li>
+          <li><strong>An independent verification gate</strong> &mdash; a second, stricter critic pass decides PASS or FAIL, instead of a single agent self-certifying its own draft.</li>
+          <li><strong>Native Google Drive and Gmail MCP connectors</strong> &mdash; used only by the orchestrating session, for the Drive diff lookup, the Doc creation, and the outcome email.</li>
           <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the actual six-step pipeline, including the PASS/FAIL branch.</li>
         </ul>
       </section>
