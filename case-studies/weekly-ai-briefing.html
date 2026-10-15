@@ -50,29 +50,19 @@
         <h2>Approach</h2>
         <p>
           This agentic workflow runs as a Cowork scheduled task, not a local Claude Code CLI script.
-          This allows for unattended weekly execution rather than a manually triggered workflow when
-          I'm at my keyboard.
+          The whole pipeline is packaged as a saved Skill, which the task invokes every Wednesday at
+          5:58am London time, so it runs weekly and unattended rather than as a manually triggered
+          workflow when I'm at my keyboard.
         </p>
         <p>
           I applied the same design discipline as in my other case studies, building it as a
-          bounded, hard-gated pipeline that runs separately for each industry.
+          bounded, hard-gated pipeline that runs separately for each industry. A draft is written,
+          independently critiqued, revised once, then put through a strict verification gate. The
+          orchestrating agent then creates the briefing in a dedicated Drive folder and emails me
+          the link: labelled FINAL if it passed, or clearly labelled DRAFT, with a description of the
+          claims that could not be verified, if it didn't, so a shaky draft is never quietly
+          presented as finished.
         </p>
-        <p>The workflow was designed as follows:</p>
-        <ul>
-          <li>A draft subagent researches and writes the brief, with every claim sourced</li>
-          <li>A separate critic subagent, with no memory of the drafting, reviews it</li>
-          <li>The draft subagent gets exactly one bounded revision round, not an open-ended loop, in order to control token utilisation</li>
-          <li>A second, stricter critic pass acts as a hard verification gate</li>
-          <li>
-            The top-level orchestrating agent, not the subagents, then creates the briefing
-            documents in a dedicated Drive folder and emails me the Drive links
-            <ul>
-              <li>If the verification gate returns PASS, the document is clearly labelled FINAL</li>
-              <li>If the verification gate returns FAIL, the document is clearly labelled DRAFT, with a description of the claims that could not be verified, so a shaky draft is never quietly presented as finished</li>
-            </ul>
-          </li>
-          <li>The whole pipeline is packaged as a saved Skill, invoked by a Cowork scheduled task every Wednesday at 5:58am London time, fully unattended</li>
-        </ul>
       </section>
 
       <section id="approach-steps">
@@ -97,13 +87,13 @@
           <li>
             <strong>I bounded the revision to exactly one round.</strong> The draft subagent gets one
             chance to address the critic's issues, not an open-ended back-and-forth that could loop
-            indefinitely on a task nobody's watching run.
+            indefinitely, and run up token usage, on a task nobody's watching run.
           </li>
           <li>
             <strong>I made the second critic pass an actual verification gate, not another opinion.</strong>
-            It confirms every issue from the first pass was resolved and independently re-fetches all
-            three source links to check they're live and show full article text rather than a
-            paywall (a best-effort check, not a guarantee). It also confirms each pricing/feature
+            It confirms every issue from the first pass was resolved and independently re-fetches the
+            brief's three source articles to check they're live and show full article text rather
+            than a paywall (a best-effort check, not a guarantee). It also confirms each pricing/feature
             claim's source actually supports it, then returns a strict PASS or FAIL, nothing softer.
           </li>
           <li>
@@ -115,20 +105,20 @@
       </section>
 
       <section id="capabilities">
-        <h2>Claude Code capabilities used</h2>
+        <h2>Claude capabilities used</h2>
         <ul>
           <li><strong>Cowork scheduled tasks</strong> &mdash; a cron-based trigger runs the whole pipeline unattended every Wednesday at 5:58am London time, with no session open on my end.</li>
           <li><strong>A saved Skill</strong> &mdash; the multi-step, multi-agent pipeline is packaged as a single Skill the scheduled task invokes, rather than a one-off prompt.</li>
           <li><strong>Two subagents with clear scopes</strong> &mdash; the drafting and critic agents are only ever asked to produce text, so Drive and Gmail access stays concentrated in exactly one place.</li>
           <li><strong>An independent verification gate</strong> &mdash; a second, stricter critic pass decides PASS or FAIL, instead of a single agent self-certifying its own draft.</li>
-          <li><strong>Native Google Drive and Gmail MCP connectors</strong> &mdash; used only by the orchestrating session, for the Drive diff lookup, the Doc creation, and the outcome email.</li>
+          <li><strong>Native Google Drive and Gmail MCP connectors</strong> &mdash; used only by the orchestrating session, to look up last week's brief, create the Doc, and send the outcome email.</li>
           <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the actual six-step pipeline, including the PASS/FAIL branch.</li>
         </ul>
       </section>
 
       <figure class="case-study-figure">
         <img src="../images/weekly-ai-briefing-architecture.svg"
-             alt="Architecture of the pipeline, run per industry every Wednesday: it looks up last week's brief in Google Drive to diff against, a draft subagent researches and writes the brief with every claim carrying an inline source link, a critic subagent with no memory of the drafting reviews it and lists issues, the draft agent gets exactly one bounded revision round, and a second stricter critic pass acts as a verification gate that re-fetches all three source links and confirms every claim is supported before returning PASS or FAIL. Only the top-level orchestrating session acts on that verdict: on PASS it creates a Doc titled FINAL and sends a ready email; on FAIL it creates a Doc titled DRAFT instead and sends an email explaining exactly why."
+             alt="Architecture of the pipeline, run per industry every Wednesday: it looks up last week's brief in Google Drive to compare against, a draft subagent researches and writes the brief with every claim carrying an inline source link, a critic subagent with no memory of the drafting reviews it and lists issues, the draft subagent gets exactly one bounded revision round, and a second stricter critic pass acts as a verification gate that re-fetches the brief's three source articles and confirms every claim is supported before returning PASS or FAIL. Only the top-level orchestrating session acts on that verdict: on PASS it creates a Doc titled FINAL and sends a ready email; on FAIL it creates a Doc titled DRAFT instead and sends an email explaining exactly why."
              width="680" height="580" loading="lazy">
         <figcaption>The bounded, hard-gated pipeline, run per industry every Wednesday &mdash; only the top-level orchestrating session, never a subagent, writes to Drive or sends email.</figcaption>
       </figure>
