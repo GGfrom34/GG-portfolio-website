@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PRD Review and Split &mdash; Guillaume Goujon</title>
+  <meta name="description" content="Case study: a public prototype that reviews a PRD and proposes a Jira breakdown, built with Claude Code, a Lovable frontend and a Supabase backend with hard AI spend caps.">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../styles.css?v=4">
+</head>
+<body>
+  <header class="site-header">
+    <div class="site-icon">
+      <img src="../favicon.svg" alt="GG logo" width="40" height="40">
+    </div>
+    <div class="header-inner">
+      <a class="home-link" href="../index.html">
+        <img src="../profile.webp" alt="Guillaume Goujon" class="profile-photo" width="44" height="44">
+      </a>
+      <div class="header-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <article class="case-study">
+      <a class="back-link" href="../index.html">&larr; Back to all case studies</a>
+
+      <h1>PRD Review and Split</h1>
+
+      <section id="problem">
+        <h2>Problem</h2>
+        <p>
+          My PRD to Jira workflow only worked inside my own Claude Code session, so no other product
+          manager could try it, and I couldn't learn whether they would find it useful. I wanted a
+          public prototype anyone could open in a browser: paste a PRD, get feedback, sign off the
+          improved version, review a proposed split into Jira tickets, then rate the experience.
+        </p>
+        <p>
+          Putting a Claude-powered tool on the open internet raises two risks I wanted to design out
+          before building any screens. Strangers must not be able to run up my Anthropic bill, so I
+          needed absolute daily token caps. And PRDs can hold confidential or personal information,
+          so I wanted to keep as little visitor data as possible, with a survey of simple 1-5
+          ratings and no free text.
+        </p>
+      </section>
+
+      <section id="approach">
+        <h2>Approach</h2>
+        <p>
+          I asked Claude Code to propose an architecture before any code existed, with two fixed
+          constraints: the intelligence had to come from Claude sub-agents, and the frontend had to
+          be built in Lovable. It explored what I had already built, including my agents, my skill
+          and the token-budget code from the Tariff Advisor, and I approved a plan that keeps Lovable
+          to the screens only. The browser calls one Supabase Edge Function that holds my Anthropic
+          key, runs each sub-agent as its own isolated Claude call, and enforces every limit.
+        </p>
+        <p>
+          I built and tested that backend first, because it is the part that spends money. Then I
+          wrote a detailed spec for Lovable to build the screens against a mock API.
+        </p>
+      </section>
+
+      <section id="approach-steps">
+        <h2>Approach &mdash; step by step</h2>
+        <ul>
+          <li>
+            <strong>I chose isolated API calls over the Agent SDK.</strong> Each sub-agent is a
+            separate prompt with its own context, so token use is counted exactly from the API's
+            usage figures, which is what hard caps need.
+          </li>
+          <li>
+            <strong>I reused my existing agents instead of rewriting them.</strong> A script copies
+            the rubric, the improvement loop and the breakdown rules out of my Claude Code agent and
+            skill files, and a test fails if the two ever drift apart.
+          </li>
+          <li>
+            <strong>I stacked the caps and made them absolute.</strong> Per-call and input-size
+            limits sit under per-session, per-visitor and global daily budgets. The budget is
+            reserved before each call and corrected from the real usage afterwards, inside the
+            database, with a spend limit on a dedicated Anthropic workspace as the outer wall.
+          </li>
+          <li>
+            <strong>I moved the sign-off gates out of the prompts and into code.</strong> The server
+            only allows the steps in order and allows one revision of the split, so the flow can't be
+            skipped by a clever request.
+          </li>
+          <li>
+            <strong>I kept visitor data to a minimum.</strong> PRDs are never stored, IP addresses
+            are only used as a daily-changing hash deleted after two days, and the survey writes five
+            1-5 ratings to a Google Sheet.
+          </li>
+          <li>
+            <strong>I checked current documentation before committing to a design.</strong> That
+            changed two decisions. Lovable doesn't deploy backend code from GitHub, so I used my own
+            Supabase project in an EU region instead of Lovable Cloud. Supabase's new API keys aren't
+            JWTs, so the function is public by design and protected by the caps and an allowed-origins
+            list.
+          </li>
+          <li>
+            <strong>I tested the first Lovable draft with a different PRD.</strong> It flagged the
+            right gaps on my sample PRD, but a dog-sitter PRD returned the same findings. The draft
+            was running on the mock data I had asked it to start with, not a real model.
+          </li>
+        </ul>
+      </section>
+
+      <section id="capabilities">
+        <h2>Claude Code capabilities used</h2>
+        <ul>
+          <li><strong>Plan Mode with Explore subagents</strong> &mdash; mapped my existing agents and budget code, then waited for my approval before any file was written.</li>
+          <li><strong>Web search and page fetch</strong> &mdash; checked the current Lovable, Supabase and Anthropic documentation instead of relying on memory.</li>
+          <li><strong>A test-first backend, broken on purpose</strong> &mdash; 127 automated tests run against real SQL in an in-process Postgres, and I deliberately broke the code to confirm the tests fail when they should.</li>
+          <li><strong>Terminal and the Supabase CLI</strong> &mdash; linked the project, applied the migrations, set the secrets from a file it never read, deployed the function and smoke-tested it.</li>
+          <li><strong>A spec written for another AI tool</strong> &mdash; a screen-by-screen spec and API contract for Lovable, built mock-first so the interface could be judged before any backend existed.</li>
+          <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the request path and where each secret lives.</li>
+        </ul>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-architecture.svg"
+             alt="Architecture of the PRD Review and Split prototype: a product manager uses the Lovable frontend, which only shows screens and holds no keys. It calls one Supabase Edge Function over the internet. That function holds the Anthropic key and enforces the step order and the token caps. It makes one isolated Claude call per step through the Anthropic API, keeps token counters and the current step in Supabase Postgres, which stores no PRD text and is purged daily, and sends the survey ratings to a Google Apps Script web app that checks a secret and the row shape before appending five ratings to a Google Sheet."
+             width="680" height="540" loading="lazy">
+        <figcaption>The request path of the prototype. Only the Edge Function holds secrets, and the browser never talks to Claude directly.</figcaption>
+      </figure>
+
+      <section id="outcome">
+        <h2>Outcome</h2>
+        <ul>
+          <li>
+            A deployed backend, tested end to end. A real review of a dog-sitter PRD took 21 seconds
+            and returned findings specific to it, such as sitter verification, cancellations and
+            payments. A full pass through to the survey wrote one row to the Google Sheet.
+          </li>
+          <li>
+            127 automated tests covering the token caps, the step order and the survey rules.
+          </li>
+          <li>
+            A first draft of the Lovable frontend, still running on mock data (below). Connecting it
+            to the live backend, testing the caps under load and sharing it with product managers
+            come next.
+          </li>
+        </ul>
+        <p>
+          <em>The prototype isn't live yet, so there is no usage or feedback to report. I'll add it
+          once product managers have tried it.</em>
+        </p>
+      </section>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-paste-screen.png"
+             alt="The first Lovable draft of the prototype's opening screen, titled Get your PRD ready to build. A six-step progress bar runs across the top, followed by a how-it-works list, a privacy notice with a required tick box saying not to paste confidential or personal data, and a PRD text box with a 12,000-character counter and a Review my PRD button."
+             width="700" height="857" loading="lazy">
+        <figcaption>The first Lovable draft of the opening screen, with the privacy notice and the 12,000-character limit from the spec.</figcaption>
+      </figure>
+
+      <section id="repo">
+        <h2>Repository</h2>
+        <p><a href="https://github.com/GGfrom34/prd-to-jira-lovable" target="_blank" rel="noopener noreferrer">View the GitHub repo</a> (the backend, its tests and the Lovable spec)</p>
+      </section>
+    </article>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <span>&copy; 2026 Guillaume Goujon</span>
+      <div class="footer-links">
+        <a href="https://www.linkedin.com/in/guillaumegoujon/" id="linkedin-link-footer" target="_blank" rel="noopener noreferrer">LinkedIn</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 540" width="680" height="540" role="img" font-family="Arial, Helvetica, sans-serif">
+  <title>Architecture of the PRD Review and Split prototype</title>
+  <desc>A visitor uses the Lovable frontend, which only shows screens and holds no keys. It calls one Supabase Edge Function over the internet. That function holds the Anthropic key and enforces the step order and the token caps. It makes one isolated Claude call per step through the Anthropic API, keeps token counters and the current step in Supabase Postgres, which a daily job purges, and sends the five survey ratings to a Google Apps Script web app that appends a row to a Google Sheet.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#5c5c5c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect x="260" y="24" width="160" height="46" rx="4" fill="#f1efe8" stroke="#888780" stroke-width="0.5"/>
+  <text x="340" y="43" text-anchor="middle" font-size="14" font-weight="700" fill="#2c2c2a">Visitor</text>
+  <text x="340" y="60" text-anchor="middle" font-size="12" fill="#5f5e5a">A product manager</text>
+
+  <line x1="340" y1="70" x2="340" y2="96" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="200" y="96" width="280" height="54" rx="4" fill="#eaf3de" stroke="#639922" stroke-width="0.5"/>
+  <text x="340" y="117" text-anchor="middle" font-size="14" font-weight="700" fill="#173404">Lovable frontend</text>
+  <text x="340" y="135" text-anchor="middle" font-size="12" fill="#27500a">Screens only, holds no keys</text>
+
+  <line x1="340" y1="150" x2="340" y2="190" stroke="#5c5c5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="352" y="174" text-anchor="start" font-size="12" fill="#5f5e5a">Over the internet</text>
+
+  <rect x="50" y="190" width="580" height="150" rx="6" fill="none" stroke="#b4b2a9" stroke-width="0.5" stroke-dasharray="4 3"/>
+  <text x="340" y="210" text-anchor="middle" font-size="14" font-weight="700" fill="#2c2c2a">Supabase, EU region</text>
+
+  <rect x="80" y="228" width="250" height="90" rx="4" fill="#eeedfe" stroke="#534ab7" stroke-width="0.5"/>
+  <text x="205" y="252" text-anchor="middle" font-size="14" font-weight="700" fill="#26215c">Edge Function</text>
+  <text x="205" y="272" text-anchor="middle" font-size="12" fill="#3c3489">Holds the Anthropic key</text>
+  <text x="205" y="288" text-anchor="middle" font-size="12" fill="#3c3489">Enforces step order</text>
+  <text x="205" y="304" text-anchor="middle" font-size="12" fill="#3c3489">and the token caps</text>
+
+  <rect x="350" y="228" width="250" height="90" rx="4" fill="#e1f5ee" stroke="#0f6e56" stroke-width="0.5"/>
+  <text x="475" y="252" text-anchor="middle" font-size="14" font-weight="700" fill="#04342c">Postgres</text>
+  <text x="475" y="272" text-anchor="middle" font-size="12" fill="#085041">Token counters, current step</text>
+  <text x="475" y="288" text-anchor="middle" font-size="12" fill="#085041">No PRD text stored</text>
+  <text x="475" y="304" text-anchor="middle" font-size="12" fill="#085041">Purged daily</text>
+
+  <line x1="330" y1="273" x2="350" y2="273" stroke="#5c5c5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+
+  <line x1="150" y1="318" x2="150" y2="390" stroke="#5c5c5c" stroke-width="1.5" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+  <text x="162" y="360" text-anchor="start" font-size="12" fill="#5f5e5a">One call per step</text>
+
+  <path d="M280 318 L280 356 L475 356 L475 390" fill="none" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="378" y="350" text-anchor="middle" font-size="12" fill="#5f5e5a">Survey ratings</text>
+
+  <rect x="50" y="390" width="200" height="54" rx="4" fill="#e6f1fb" stroke="#185fa5" stroke-width="0.5"/>
+  <text x="150" y="412" text-anchor="middle" font-size="14" font-weight="700" fill="#042c53">Anthropic API</text>
+  <text x="150" y="430" text-anchor="middle" font-size="12" fill="#0c447c">Claude, isolated calls</text>
+
+  <rect x="375" y="390" width="200" height="54" rx="4" fill="#faece7" stroke="#993c1d" stroke-width="0.5"/>
+  <text x="475" y="412" text-anchor="middle" font-size="14" font-weight="700" fill="#4a1b0c">Apps Script</text>
+  <text x="475" y="430" text-anchor="middle" font-size="12" fill="#712b13">Checks a secret and the row</text>
+
+  <line x1="475" y1="444" x2="475" y2="474" stroke="#5c5c5c" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="375" y="474" width="200" height="54" rx="4" fill="#faeeda" stroke="#854f0b" stroke-width="0.5"/>
+  <text x="475" y="496" text-anchor="middle" font-size="14" font-weight="700" fill="#412402">Google Sheet</text>
+  <text x="475" y="514" text-anchor="middle" font-size="12" fill="#633806">Five ratings, no free text</text>
+</svg>
