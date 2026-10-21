@@ -58,7 +58,9 @@
         </p>
         <p>
           I built and tested that backend first, because it is the part that spends money. Then I
-          wrote a detailed spec for Lovable to build the screens against a mock API.
+          wrote a detailed spec for Lovable to build the screens against a mock API. Once the screens
+          were done, I pointed them at the live backend and tested the whole flow with real PRDs,
+          which is where most of the learning happened.
         </p>
       </section>
 
@@ -103,6 +105,23 @@
             right gaps on my sample PRD, but a dog-sitter PRD returned the same findings. The draft
             was running on the mock data I had asked it to start with, not a real model.
           </li>
+          <li>
+            <strong>I measured reliability instead of trusting one good run.</strong> On real PRDs the
+            review step failed intermittently, at worst about one run in two, because the model
+            sometimes returned a malformed reply and my validator rejected all of it. I added a repair
+            step for the usual slips, one retry that still goes through the token caps, and an error
+            detail that names the problem without logging anything the visitor wrote. Anthropic's
+            strict tool mode looked like the cleaner fix, but it hid my length limits from the model,
+            which then sometimes ran on until it hit the output cap, so I reverted it.
+          </li>
+          <li>
+            <strong>I let live testing find what unit tests couldn't.</strong> Lovable's editor preview
+            runs on a different domain from the one I had allowed, so the browser silently blocked the
+            API. My own test traffic used up the daily allowance for our shared connection, which I
+            reset by rotating the secret behind the visitor hash. And the API's host sets a Cloudflare
+            security cookie, so I corrected my "no cookies" claim to "none set by the app" and added
+            the disclosure to the spec's privacy notice.
+          </li>
         </ul>
       </section>
 
@@ -111,8 +130,8 @@
         <ul>
           <li><strong>Plan Mode with Explore subagents</strong> &mdash; mapped my existing agents and budget code, then waited for my approval before any file was written.</li>
           <li><strong>Web search and page fetch</strong> &mdash; checked the current Lovable, Supabase and Anthropic documentation instead of relying on memory.</li>
-          <li><strong>A test-first backend, broken on purpose</strong> &mdash; 127 automated tests run against real SQL in an in-process Postgres, and I deliberately broke the code to confirm the tests fail when they should.</li>
-          <li><strong>Terminal and the Supabase CLI</strong> &mdash; linked the project, applied the migrations, set the secrets from a file it never read, deployed the function and smoke-tested it.</li>
+          <li><strong>A test-first backend, broken on purpose</strong> &mdash; 154 automated tests run against real SQL in an in-process Postgres, and I deliberately broke the code to confirm the tests fail when they should.</li>
+          <li><strong>Terminal and the Supabase CLI</strong> &mdash; linked the project, applied the migrations, set the secrets from a file it never read, deployed the function, then ran the live function repeatedly to measure reliability and restored its own temporary test limits afterwards.</li>
           <li><strong>A spec written for another AI tool</strong> &mdash; a screen-by-screen spec and API contract for Lovable, built mock-first so the interface could be judged before any backend existed.</li>
           <li><strong>Architecture diagram generation</strong> &mdash; produced the diagram below of the request path and where each secret lives.</li>
         </ul>
@@ -129,30 +148,91 @@
         <h2>Outcome</h2>
         <ul>
           <li>
-            A deployed backend, tested end to end. A real review of a dog-sitter PRD took 21 seconds
-            and returned findings specific to it, such as sitter verification, cancellations and
-            payments. A full pass through to the survey wrote one row to the Google Sheet.
+            A working prototype from start to finish. The Lovable app, running against the live
+            backend, takes a PRD through review, suggested fixes, sign-off, a proposed Epic and issue
+            split with one revision, a Jira link, and a five-question survey whose answers land as a
+            row in a Google Sheet (screenshots below). A full run takes about 100 seconds of model
+            time.
           </li>
           <li>
-            127 automated tests covering the token caps, the step order and the survey rules.
+            Reliable enough to share. After the fixes, 12 of 12 reviews succeeded across three
+            different PRDs, at about 17 seconds each, compared with failures in up to half of runs
+            before.
           </li>
           <li>
-            A first draft of the Lovable frontend, still running on mock data (below). Connecting it
-            to the live backend, testing the caps under load and sharing it with product managers
-            come next.
+            Spend and data limits that were tested, not just written. 154 automated tests cover the
+            token caps, the step order and the survey rules. The standing limits are 200,000 tokens a
+            day across all visitors, 100,000 per visitor, 80,000 per session and 10 sessions per
+            visitor per day, with a spend limit on the Anthropic workspace as the outer wall.
           </li>
         </ul>
         <p>
-          <em>The prototype isn't live yet, so there is no usage or feedback to report. I'll add it
-          once product managers have tried it.</em>
+          <em>So far only I have used the prototype, so there is no feedback from product managers to
+          report yet. The rows in the Sheet are test runs.</em>
         </p>
       </section>
 
       <figure class="case-study-figure">
         <img src="../images/prd-review-and-split-paste-screen.png"
-             alt="The first Lovable draft of the prototype's opening screen, titled Get your PRD ready to build. A six-step progress bar runs across the top, followed by a how-it-works list, a privacy notice with a required tick box saying not to paste confidential or personal data, and a PRD text box with a 12,000-character counter and a Review my PRD button."
+             alt="The Lovable opening screen of the prototype, titled Get your PRD ready to build. A six-step progress bar runs across the top, followed by a how-it-works list, a privacy notice with a required tick box saying not to paste confidential or personal data, and a PRD text box with a 12,000-character counter and a Review my PRD button."
              width="700" height="857" loading="lazy">
-        <figcaption>The first Lovable draft of the opening screen, with the privacy notice and the 12,000-character limit from the spec.</figcaption>
+        <figcaption>The Lovable opening screen, with a clear description of the use case and step by step functionality.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-review.png"
+             alt="The review screen for a dog-sitter PRD. A red verdict badge reads Needs significant rework, followed by a one-sentence summary and a green note on what is working. Below, findings are grouped into Blockers and Gaps. Each shows a severity label, the quality dimension, the PRD section, a short quote from the PRD and a one or two sentence explanation, such as no measurable success metrics and no acceptance criteria for the booking and payment feature."
+             width="677" height="865" loading="lazy">
+        <figcaption>The review: a verdict, then findings grouped as blockers, gaps and nice-to-haves, each tied to the excerpt of the PRD it refers to.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-improve.png"
+             alt="The suggested fixes screen showing one blocker card. It repeats the finding, asks a targeted question about the key launch success number, shows the original PRD sentence under Before, and offers an editable Proposed rewrite with a 2,500-character counter. A highlighted preview marks the assumptions in square brackets, such as 3 months, 50 and 30 percent, with a warning to check them. Below are three choices: Accept as written, Use my edit, and Defer."
+             width="670" height="862" loading="lazy">
+        <figcaption>The suggested fixes: each blocker and gap gets a targeted question, a proposed rewrite with every assumption highlighted in brackets, and a choice to accept, edit or defer.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-sign-off.png"
+             alt="The sign-off screen with Edit and Preview tabs above an editable text box holding the improved PRD, with a 6,830 of 20,000 character counter. A warning below says 27 assumptions in square brackets remain and should be edited before signing off. Copy and Download .md buttons sit above a Sign off this PRD button."
+             width="641" height="785" loading="lazy">
+        <figcaption>The sign-off: the improved PRD stays editable until approval, with a warning that 27 bracketed assumptions still need a human decision.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-split.png"
+             alt="The proposed split screen. An Epic card titled Pawsit: Dog Sitter Booking Marketplace summarises the problem, then lists out-of-scope items and unresolved open questions, and ends with a source line naming the PRD. Below it are Story cards, such as Owner and sitter account creation, Sitter profile with services, pricing and calendar, and Search for sitters, each with a short description and acceptance criteria."
+             width="682" height="863" loading="lazy">
+        <figcaption>The proposed split into one Epic plus Stories and Tasks, with out-of-scope items and open questions folded into the Epic so they read as unresolved, not as commitments.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-jira-link.png"
+             alt="The Send to Jira screen with the question Where should these tickets go, a text box with an example Jira project link as its placeholder, and a Submit link button."
+             width="633" height="316" loading="lazy">
+        <figcaption>The last working step asks for a link to the Jira project. The link is only checked for its format, never opened or stored.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-next-steps.png"
+             alt="The Next steps screen. A highlighted box says the prototype stops here: it has no Jira integration so it has not created any tickets, the link was only checked for its format, and a full version would connect through Atlassian's MCP server. Below are a Copy as Markdown button and a Share quick feedback button."
+             width="636" height="386" loading="lazy">
+        <figcaption>The prototype is upfront that it stops here: with no Jira integration it hasn't created any tickets, and the breakdown can be copied out as Markdown.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-survey.png"
+             alt="The Quick feedback screen with five numbered statements about usefulness, specificity of the fixes, the match of the split, time saved and willingness to use a version that creates the tickets. Each has a 1 to 5 rating scale from Strongly disagree to Strongly agree. A note says the survey is anonymous and stores only five ratings and the date, with Submit feedback and Skip buttons."
+             width="658" height="711" loading="lazy">
+        <figcaption>The five-question survey: whole-number ratings from 1 to 5 and no free text, so nothing personal can be typed in.</figcaption>
+      </figure>
+
+      <figure class="case-study-figure">
+        <img src="../images/prd-review-and-split-google-sheet.png"
+             alt="A Google Sheet titled PRD Assistant feedback with columns for survey ID, UTC date, version and five question ratings, and two rows of test submissions. Each row holds a random ID, a date, the version 0.1 and five ratings from 1 to 5."
+             width="976" height="257" loading="lazy">
+        <figcaption>A submission lands as one row in the Google Sheet: a random ID, the date, the version and five ratings, with no personal data.</figcaption>
       </figure>
 
       <section id="repo">
